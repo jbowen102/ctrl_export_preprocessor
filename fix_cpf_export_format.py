@@ -1,6 +1,7 @@
 import os
 import csv
 import argparse
+
 from xlsxwriter.workbook import Workbook
 
 
@@ -13,7 +14,7 @@ if __name__ == "__main__":
     try:
         # Don't run if module being imported. Only if script being run directly.
         parser = argparse.ArgumentParser(description="Program to automatically "
-                                "convert CPF exports from fake .XLS to real .XLSX")
+                                "collect CPF exports into one .xlsx file.")
         parser.add_argument("-d", "--dir", help="Specify dir containing exports "
                                             "to reformat", type=str, default=".")
         # https://www.programcreek.com/python/example/748/argparse.ArgumentParser
@@ -21,41 +22,35 @@ if __name__ == "__main__":
 
         dir_path = os.path.abspath(os.path.normpath(args.dir))
 
-        for tsv_item in sorted(os.listdir(dir_path)):
-            xls_item_path = os.path.join(dir_path, tsv_item)
-            if os.path.isdir(xls_item_path):
-                # print("%s not a file." % item)
-                continue
-            if os.path.splitext(tsv_item)[-1].upper() != ".XLS":
-                continue
+        # Generate a .xlsx to populate w/ the TSV data.
+        xlsx_file = os.path.join(dir_path, "CPF_exports.xlsx")
+        with Workbook(xlsx_file) as workbook:
+            print("Creating %s" % os.path.basename(xlsx_file))
 
-            # Rename .XLSX to .tsv
-            # print("\nRenaming %s" % tsv_item, end="")
-            # tsv_item_path = os.path.splitext(xls_item_path)[0] + ".tsv"
-            # os.rename(xls_item_path, tsv_item_path)
-            tsv_item_path = xls_item_path
-            # print("...done")
+            for tsv_item in sorted(os.listdir(dir_path)):
+                tsv_item_path = os.path.join(dir_path, tsv_item)
+                if os.path.isdir(tsv_item_path):
+                    continue
+                if os.path.splitext(tsv_item)[-1].upper() != ".XLS":
+                    continue
 
-            # Generate a .xlsx to populate w/ .tsv data.
-            xlsx_file = os.path.splitext(tsv_item_path)[0] + ".xlsx"
-
-            print("Creating %s" % os.path.basename(xlsx_file), end="")
-            with Workbook(xlsx_file) as workbook:
-                worksheet = workbook.add_worksheet()
-
-                # Create a TSV file reader.
-                tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
+                print("\tReading from %s..." % tsv_item, end="")
+                # Make a new tab in the output worksheet w/ the same name as the XLS/TSV file.
+                worksheet = workbook.add_worksheet(os.path.splitext(tsv_item)[0])
 
                 # Read the row data from the TSV file and write it to the XLSX file.
+                tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
                 for row, data in enumerate(tsv_reader):
                     worksheet.write_row(row, 0, data)
 
-                # Borrowed from here
+                # Original TSV reader code borrowed from here
                 # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
+                print("done")
             print("...done")
         wait_for_input()
 
     except Exception as exception_text:
+        print("\n")
         print(exception_text)
         print("\n" + "*"*10 + "\nException encountered\n" + "*"*10)
         wait_for_input()
