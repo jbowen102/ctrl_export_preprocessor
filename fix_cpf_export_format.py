@@ -1,6 +1,7 @@
 import os
 import csv
 import argparse
+from datetime import datetime
 
 from xlsxwriter.workbook import Workbook
 
@@ -23,7 +24,8 @@ if __name__ == "__main__":
         dir_path = os.path.abspath(os.path.normpath(args.dir))
 
         # Generate a .xlsx to populate w/ the TSV data.
-        xlsx_file = os.path.join(dir_path, "CPF_exports.xlsx")
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H%M%S")
+        xlsx_file = os.path.join(dir_path, "CPF_exports_%s.xlsx" % timestamp)
         with Workbook(xlsx_file) as workbook:
             print("Creating %s" % os.path.basename(xlsx_file))
 
