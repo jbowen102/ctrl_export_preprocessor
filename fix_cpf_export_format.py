@@ -1,5 +1,6 @@
 import os
 import csv
+import xlrd
 import argparse
 from datetime import datetime
 
@@ -41,9 +42,14 @@ if __name__ == "__main__":
                 worksheet = workbook.add_worksheet(os.path.splitext(tsv_item)[0])
 
                 # Read the row data from the TSV file and write it to the XLSX file.
-                tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
-                for row, data in enumerate(tsv_reader):
-                    worksheet.write_row(row, 0, data)
+                # tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
+                # for row, data in enumerate(tsv_reader):
+                #     worksheet.write_row(row, 0, data)
+                with xlrd.open_workbook(tsv_item_path) as xls_reader:
+                    xls_sheet = xls_reader.sheet_by_index(0)
+                    for row in range(xls_sheet.nrows):
+                        data = xls_sheet.row_values(row)
+                        worksheet.write_row(row, 0, data)
 
                 # Original TSV reader code borrowed from here
                 # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
