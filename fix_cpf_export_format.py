@@ -4,6 +4,7 @@ import xlrd
 import argparse
 from datetime import datetime
 
+import magic
 from xlsxwriter.workbook import Workbook
 
 
@@ -30,6 +31,7 @@ if __name__ == "__main__":
         with Workbook(xlsx_file) as workbook:
             print("Creating %s" % os.path.basename(xlsx_file))
 
+            # Loop through all CPF exports in directory.
             for tsv_item in sorted(os.listdir(dir_path)):
                 tsv_item_path = os.path.join(dir_path, tsv_item)
                 if os.path.isdir(tsv_item_path):
@@ -37,22 +39,36 @@ if __name__ == "__main__":
                 if os.path.splitext(tsv_item)[-1].upper() != ".XLS":
                     continue
 
-                print("\tReading from %s..." % tsv_item, end="")
                 # Make a new tab in the output worksheet w/ the same name as the XLS/TSV file.
                 worksheet = workbook.add_worksheet(os.path.splitext(tsv_item)[0])
+                # Read the row data from the TSV or XLS file and write it to the XLSX file.
 
-                # Read the row data from the TSV file and write it to the XLSX file.
-                # tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
-                # for row, data in enumerate(tsv_reader):
-                #     worksheet.write_row(row, 0, data)
-                with xlrd.open_workbook(tsv_item_path) as xls_reader:
-                    xls_sheet = xls_reader.sheet_by_index(0)
-                    for row in range(xls_sheet.nrows):
-                        data = xls_sheet.row_values(row)
+                # Determine if file is real XLS or TSV.
+                # https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
+                # mime_type = mimetypes.guess_type(tsv_item_path)[0] # This only uses extension to determine.
+                MagicObj = magic.detect_from_filename(tsv_item_path)
+                # Not based on extension, despite function name seeming to indicate that.
+
+                print("\tReading from %s..." % tsv_item, end="")
+                if MagicObj.mime_type == "text/plain":
+                    # TSV masquerading as XLS
+                    tsv_reader = csv.reader(open(tsv_item_path, 'r'), delimiter='\t')
+                    for row, data in enumerate(tsv_reader):
                         worksheet.write_row(row, 0, data)
 
-                # Original TSV reader code borrowed from here
-                # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
+                elif MagicObj.mime_type == "application/vnd.ms-excel":
+                    # Real XLS
+                    with xlrd.open_workbook(tsv_item_path) as xls_reader:
+                        xls_sheet = xls_reader.sheet_by_index(0)
+                        for row in range(xls_sheet.nrows):
+                            data = xls_sheet.row_values(row)
+                            worksheet.write_row(row, 0, data)
+                else:
+                    raise Exception('"%s" - Filetype not recognized (should be '
+                                    'CPF export w/ .XLS extension)' % tsv_item)
+                # Reference: If wrong file is passed to wrong reader, returns UnicodeDecodeError w/ TSV-read attempt.
+                # xlrd.biffh.XLRDError w/ XLS-read attempt (that encounters a TSV)
+
                 print("done")
             print("...done")
         wait_for_input()
