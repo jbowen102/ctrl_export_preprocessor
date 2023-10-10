@@ -16,6 +16,8 @@ TEST*
 *.code-workspace
 
 # Project-specific
+*.xls
+*.XLS
 
 # Ignore any file/dir/symlink starting w/ these names:
 bu*
