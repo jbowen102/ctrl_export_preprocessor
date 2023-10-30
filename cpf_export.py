@@ -11,10 +11,13 @@ PROG_POS_X=1433
 PROG_POS_Y=547
 
 
-
-def export_cpfs():
+def select_program():
+    # Brings 1314 program into focus
     gui.click(PROG_POS_X, PROG_POS_Y) # Click on program to bring into focus
 
+
+def open_cpf():
+    # Assumes 1314 program already in focus
     # Open file
     gui.hotkey("ctrl", "o")
     time.sleep(0.2)
@@ -37,7 +40,9 @@ def export_cpfs():
     gui.press(["enter"]) # Confirm CPF filename to open.
     time.sleep(1) # Allow time for CPF to open.
 
-    # Export
+
+def export_cpf():
+    # Assumes 1314 program already in focus
     gui.hotkey("alt", "f") # Open File menu (toolbar).
     time.sleep(0.2)
     gui.press(["e"]) # Select Export from File menu.
@@ -67,5 +72,7 @@ if __name__ == "__main__":
         os.mkdir(EXPORT_DIR)
 
     input("Ready for GUI interaction?")
-    export_cpfs()
+    select_program()
+    open_cpf()
+    export_cpf()
     print("GUI interaction done")
