@@ -11,48 +11,46 @@ PROG_POS_X=1433
 PROG_POS_Y=547
 
 
+
 def select_program():
-    # Brings 1314 program into focus
+    # Brings 1314 program into focus.
     gui.click(PROG_POS_X, PROG_POS_Y) # Click on program to bring into focus
 
 
-def open_cpf():
-    # Assumes 1314 program already in focus
-    # Open file
+def open_cpf(file_path):
+    # Assumes 1314 program already in focus.
+    # Get to import folder
     gui.hotkey("ctrl", "o")
     time.sleep(0.2)
+
     gui.hotkey("ctrl", "l") # Select address bar
     time.sleep(0.2)
-    gui.typewrite(IMPORT_DIR) # Navigate to import folder.
+
+    gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
     time.sleep(0.2)
     gui.press(["enter"])
     time.sleep(0.2)
 
-    # Copy filename to clipboard for use in export.
-    gui.click(1207, 209); # Select first file in CPF_DIR to import.
-    gui.hotkey("f2"); # "Rename" shortcut
-    time.sleep(0.2)
-    gui.hotkey("ctrl", "c"); # Copy filename, excluding extension
-    time.sleep(0.2)
-    gui.press(["esc"]), # Exit rename
-    time.sleep(0.2)
-
+    gui.hotkey("alt", "n") # Select filename field
+    gui.typewrite(os.path.basename(file_path))
     gui.press(["enter"]) # Confirm CPF filename to open.
     time.sleep(1) # Allow time for CPF to open.
 
 
-def export_cpf():
-    # Assumes 1314 program already in focus
+def export_cpf(target_dir, filename):
+    # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
     time.sleep(0.2)
     gui.press(["e"]) # Select Export from File menu.
     time.sleep(0.2)
-    gui.hotkey("ctrl", "v"); # Paste in imported filename
+
+    gui.hotkey("alt", "n") # Select filename field
+    gui.typewrite(os.path.splitext(filename)[0])
     time.sleep(0.2)
 
     gui.hotkey("ctrl", "l") # Select address bar
     time.sleep(0.1)
-    gui.typewrite(EXPORT_DIR) # Navigate to export folder.
+    gui.typewrite(target_dir) # Navigate to target export folder.
     time.sleep(0.1)
     gui.press(["enter"])
     time.sleep(0.2)
@@ -60,6 +58,21 @@ def export_cpf():
 
     time.sleep(0.5)
     gui.hotkey("ctrl", "f4") # Close CPF file.
+
+
+def convert_all(import_dir, export_dir):
+    import_files = os.listdir(import_dir)
+    for n, filename in enumerate(import_files):
+        select_program()
+        if (os.path.isfile(os.path.join(import_dir, filename)) and
+                            os.path.splitext(filename)[-1].lower() == ".cpf"):
+            print("Processing %s..." % filename)
+            open_cpf(os.path.join(import_dir, filename))
+            export_cpf(export_dir, filename)
+            print("\tdone")
+        else:
+            # Skip directories and non-CPFs
+            continue
 
 
 if __name__ == "__main__":
@@ -72,7 +85,6 @@ if __name__ == "__main__":
         os.mkdir(EXPORT_DIR)
 
     input("Ready for GUI interaction?")
-    select_program()
-    open_cpf()
-    export_cpf()
-    print("GUI interaction done")
+    print()
+    convert_all(IMPORT_DIR, EXPORT_DIR)
+    print("GUI interaction done\n")
