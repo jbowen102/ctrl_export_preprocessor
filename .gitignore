@@ -18,6 +18,7 @@ TEST*
 # Project-specific
 *.xls
 *.XLS
+dir_names.py
 
 # Ignore any file/dir/symlink starting w/ these names:
 bu*
