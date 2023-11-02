@@ -1,16 +1,49 @@
 import os
 import time
+import subprocess
 
 import colorama
 import pyautogui as gui
 
-from dir_names import CPF_DIR, IMPORT_DIR, EXPORT_DIR
+from dir_names import CPF_DIR, CPF_DIR_REMOTE, IMPORT_DIR, EXPORT_DIR
 
 
 # Constants
 PROG_POS_X=1433
 PROG_POS_Y=547
 
+
+def update_import_files():
+    # Sync from remote folder to local one to buffer before processing.
+    if os.name == "nt":
+        print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
+        returncode = subprocess.call(["robocopy", CPF_DIR_REMOTE, IMPORT_DIR,
+                                                        "/purge", "/compress"])
+        # Removes any extraneous files from local import folder that don't exist in remote.
+        # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy?redirectedfrom=MSDN
+        # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
+        print(colorama.Style.RESET_ALL)
+
+        # Check for success
+        if returncode in [0, 1, 2]:
+            # https://superuser.com/questions/280425/getting-robocopy-to-return-a-proper-exit-code
+            print("Sync successful\n")
+        else:
+            raise Exception("SYNC FAILED")
+    elif os.name == "posix":
+        print("Attempting to run rsync..." + colorama.Fore.YELLOW)
+        CompProc = subprocess.run(["rsync", "-azivh", "--delete-before",
+                        CPF_DIR_REMOTE, IMPORT_DIR], stderr=subprocess.STDOUT)
+        # Removes any extraneous files from local import folder that don't exist in remote.
+        print(colorama.Style.RESET_ALL)
+
+        # Check for success
+        if CompProc.returncode == 0:
+            print("Sync successful\n")
+        else:
+            raise Exception("SYNC FAILED")
+    else:
+        raise Exception("Unrecognized OS type: %s" % os.name)
 
 
 def select_program():
@@ -68,7 +101,7 @@ def export_cpf(target_dir, filename):
 
 
 def convert_all(import_dir, export_dir):
-    import_files = os.listdir(import_dir)
+    import_files = sorted(os.listdir(import_dir))
     for n, filename in enumerate(import_files):
         select_program()
         if (os.path.isfile(os.path.join(import_dir, filename)) and
@@ -86,10 +119,30 @@ if __name__ == "__main__":
     # Make CPF dirs if any don't exist yet.
     if not os.path.exists(CPF_DIR):
         os.mkdir(CPF_DIR)
+        print("Created %s" % CPF_DIR)
     if not os.path.exists(IMPORT_DIR):
         os.mkdir(IMPORT_DIR)
+        print("Created %s" % IMPORT_DIR)
+
+    # Pull from remote CPF dir.
+    if os.listdir(IMPORT_DIR):
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + "Update local "
+                            "import folder from %s ? [Y / N]" % CPF_DIR_REMOTE)
+        run_sync = input("> " + colorama.Style.RESET_ALL)
+    else:
+        # If IMPORT_DIR empty, don't prompt for sync. Just do it.
+       run_sync = "Y"
+
+    if run_sync.upper() == "Y":
+        update_import_files()
+    else:
+        print("Skipping import-dir update from network drive.\n")
+        # Accept any answer other than Y/y as negative.
+        pass
+
     if not os.path.exists(EXPORT_DIR):
         os.mkdir(EXPORT_DIR)
+        print("Created %s" % EXPORT_DIR)
     elif os.listdir(EXPORT_DIR):
         # Clear export dir before running?
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT +
@@ -104,7 +157,7 @@ if __name__ == "__main__":
 
     input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
                         "Ready for GUI interaction?" + colorama.Style.RESET_ALL)
-    print()
+    print() # blank line
 
     convert_all(IMPORT_DIR, EXPORT_DIR)
     print("\nGUI interaction done\n")
