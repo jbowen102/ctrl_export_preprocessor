@@ -38,6 +38,8 @@ def open_cpf(file_path):
 
 
 def export_cpf(target_dir, filename):
+    xls_filename = os.path.splitext(filename)[0] + ".XLS"
+
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
     time.sleep(0.2)
@@ -45,7 +47,7 @@ def export_cpf(target_dir, filename):
     time.sleep(0.2)
 
     gui.hotkey("alt", "n") # Select filename field
-    gui.typewrite(os.path.splitext(filename)[0])
+    gui.typewrite(xls_filename)
     time.sleep(0.2)
 
     gui.hotkey("ctrl", "l") # Select address bar
@@ -58,6 +60,10 @@ def export_cpf(target_dir, filename):
 
     time.sleep(0.5)
     gui.hotkey("ctrl", "f4") # Close CPF file.
+
+    # Check if new file exists in exported location as expected after conversion.
+    assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't \
+                                                confirm output file existence."
 
 
 def convert_all(import_dir, export_dir):
