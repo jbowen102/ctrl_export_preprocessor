@@ -1,6 +1,7 @@
 import os
 import time
 
+import colorama
 import pyautogui as gui
 
 from dir_names import CPF_DIR, IMPORT_DIR, EXPORT_DIR
@@ -89,8 +90,21 @@ if __name__ == "__main__":
         os.mkdir(IMPORT_DIR)
     if not os.path.exists(EXPORT_DIR):
         os.mkdir(EXPORT_DIR)
+    elif os.listdir(EXPORT_DIR):
+        # Clear export dir before running?
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT +
+                    "Export dir populated. Delete contents before processing? [Y / N]")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer.upper() == "Y":
+            for item in sorted(os.listdir(EXPORT_DIR)):
+                os.remove(os.path.join(EXPORT_DIR, item))
+        else:
+            # Accept any answer other than Y/y as negative.
+            pass
 
-    input("Ready for GUI interaction?")
+    input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
+                        "Ready for GUI interaction?" + colorama.Style.RESET_ALL)
     print()
+
     convert_all(IMPORT_DIR, EXPORT_DIR)
-    print("GUI interaction done\n")
+    print("\nGUI interaction done\n")
