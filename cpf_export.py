@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import subprocess
 
 import colorama
@@ -11,6 +12,65 @@ from dir_names import CPF_DIR, CPF_DIR_REMOTE, IMPORT_DIR, EXPORT_DIR
 # Constants
 PROG_POS_X=1433
 PROG_POS_Y=547
+
+DATE_FORMAT = "%Y%m%d"
+
+
+def datestamp_filenames(target_directory):
+    items = sorted(os.listdir(target_directory))
+    for n, file_name in enumerate(items):
+        filepath = os.path.join(target_directory, file_name)
+        item_name = os.path.splitext(file_name)[0]
+        ext = os.path.splitext(file_name)[-1]
+
+        # Check for date already present in filename
+        sn_regex = r"(3\d{6})"
+        # Any "3" followed by six more digits
+        sn_matches = re.findall(sn_regex, item_name, flags=re.IGNORECASE)
+        assert not len(sn_matches) > 1, 'More than one S/N match found in import filename "%s". Unhandled exception.' % file_name
+        assert len(sn_matches) == 1, 'No S/N match found in import filename "%s". Unhandled exception.' % file_name
+        serial_num = sn_matches[0]
+
+        # Now look for date in remaining string. Will add later if not present.
+        # Does not validate any existing datestamp in filename.
+        remaining_str = item_name.split(serial_num)
+        date_found = False
+        for substring in remaining_str:
+            if len(substring) >= len("20230101"): # long enough to be a date.
+                # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
+                # Any "20" followed by two digits,
+                    # followed by either "0" and a digit or "10", "11", or "12" (months)
+                        # followed by either "0", "1", or "2" paired with a digit (days 01-29)
+                        # or "30" or "31"
+
+                date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
+                # Any "20" followed by two digits,
+                    # followed by either "0" or "1" and any digit (months)
+                        # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
+                date_matches = re.findall(date_regex, substring, flags=re.IGNORECASE)
+
+                if len(date_matches) == 1:
+                    existing_datestamp = date_matches[0]
+                    date_found = True
+                elif len(date_matches) > 1:
+                    raise Exception("More than one date match found in import "
+                                "filename %s. Unhandled exception" % item_name)
+                else:
+                    pass
+            else:
+                pass
+
+        if date_found:
+            datestamp = existing_datestamp
+        else:
+            # Add datestamp
+            # Find file last-modified time. Precise enough for our needs.
+            mod_date = time.strftime(DATE_FORMAT, time.localtime(os.path.getmtime(filepath)))
+            datestamp = mod_date
+
+        new_filename = "%s_%s%s" % (datestamp, serial_num, ext)
+        assert os.path.exists(filepath), "File not found for rename: %s" % filepath
+        os.rename(filepath, os.path.join(target_directory, new_filename))
 
 
 def update_import_files():
@@ -44,6 +104,8 @@ def update_import_files():
             raise Exception("SYNC FAILED")
     else:
         raise Exception("Unrecognized OS type: %s" % os.name)
+
+    datestamp_filenames(IMPORT_DIR)
 
 
 def select_program():
@@ -115,8 +177,8 @@ if __name__ == "__main__":
 
     # Pull from remote CPF dir.
     if os.listdir(IMPORT_DIR):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nUpdate local "
-                            "import folder from %s ? [Y / N]" % CPF_DIR_REMOTE)
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local '
+                            'import folder from "%s" ? [Y / N]' % CPF_DIR_REMOTE)
         run_sync = input("> " + colorama.Style.RESET_ALL)
     else:
         # If IMPORT_DIR empty, don't prompt for sync. Just do it.
