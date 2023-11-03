@@ -55,15 +55,11 @@ def open_cpf(file_path):
     # Assumes 1314 program already in focus.
     # Get to import folder
     gui.hotkey("ctrl", "o")
-    time.sleep(0.2)
 
     gui.hotkey("ctrl", "l") # Select address bar
-    time.sleep(0.2)
 
     gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
-    time.sleep(0.2)
     gui.press(["enter"])
-    time.sleep(0.2)
 
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(os.path.basename(file_path))
@@ -76,28 +72,21 @@ def export_cpf(target_dir, filename):
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
-    time.sleep(0.2)
     gui.press(["e"]) # Select Export from File menu.
-    time.sleep(0.2)
 
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(xls_filename)
-    time.sleep(0.2)
 
     gui.hotkey("ctrl", "l") # Select address bar
-    time.sleep(0.1)
     gui.typewrite(target_dir) # Navigate to target export folder.
-    time.sleep(0.1)
     gui.press(["enter"])
-    time.sleep(0.2)
     gui.hotkey("alt", "s") # Save
+    time.sleep(0.2)
 
-    time.sleep(0.5)
     gui.hotkey("ctrl", "f4") # Close CPF file.
 
     # Check if new file exists in exported location as expected after conversion.
-    assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't \
-                                                confirm output file existence."
+    assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't confirm output file existence."
 
 
 def convert_all(import_dir, export_dir):
@@ -126,7 +115,7 @@ if __name__ == "__main__":
 
     # Pull from remote CPF dir.
     if os.listdir(IMPORT_DIR):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + "Update local "
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nUpdate local "
                             "import folder from %s ? [Y / N]" % CPF_DIR_REMOTE)
         run_sync = input("> " + colorama.Style.RESET_ALL)
     else:
@@ -155,9 +144,16 @@ if __name__ == "__main__":
             # Accept any answer other than Y/y as negative.
             pass
 
+    # answer = gui.confirm("Ready for GUI interaction?")
+    # if answer != "OK":
+    #     raise Exception("User canceled.")
     input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-                        "Ready for GUI interaction?" + colorama.Style.RESET_ALL)
+                    "\nReady for GUI interaction?" + colorama.Style.RESET_ALL)
     print() # blank line
 
+    gui.FAILSAFE = True
+    # Allows moving mouse to upper-left corner of screen to abort execution.
+    gui.PAUSE = 0.2 # 200 ms pause after each command.
+    # https://pyautogui.readthedocs.io/en/latest/quickstart.html
     convert_all(IMPORT_DIR, EXPORT_DIR)
     print("\nGUI interaction done\n")
