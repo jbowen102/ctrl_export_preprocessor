@@ -4,7 +4,9 @@ import re
 import subprocess
 
 import colorama
-import pyautogui as gui
+if os.name == "nt":
+    # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
+    import pyautogui as gui
 
 from dir_names import CPF_DIR, CPF_DIR_REMOTE, IMPORT_DIR, EXPORT_DIR
 
@@ -80,13 +82,14 @@ def update_import_files():
         returncode = subprocess.call(["robocopy", CPF_DIR_REMOTE, IMPORT_DIR,
                                                         "/purge", "/compress"])
         # Removes any extraneous files from local import folder that don't exist in remote.
-        # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy?redirectedfrom=MSDN
+        # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
         print(colorama.Style.RESET_ALL)
 
         # Check for success
-        if returncode in [0, 1, 2]:
+        if returncode < 8:
             # https://superuser.com/questions/280425/getting-robocopy-to-return-a-proper-exit-code
+            # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
             print("Sync successful\n")
         else:
             raise Exception("SYNC FAILED")
