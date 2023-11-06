@@ -24,8 +24,8 @@ def datestamp_filenames(target_directory):
         ext = os.path.splitext(file_name)[-1]
 
         # Check for date already present in filename
-        sn_regex = r"(3\d{6})"
-        # Any "3" followed by six more digits
+        sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
+        # Any "3" or "5" or "8" followed by six more digits
         sn_matches = re.findall(sn_regex, item_name, flags=re.IGNORECASE)
         assert not len(sn_matches) > 1, 'More than one S/N match found in import filename "%s". Unhandled exception.' % file_name
         assert len(sn_matches) == 1, 'No S/N match found in import filename "%s". Unhandled exception.' % file_name
