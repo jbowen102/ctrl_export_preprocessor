@@ -11,7 +11,7 @@ if os.name == "nt":
 
 from dir_names import DIR_REMOTE, \
                       DIR_FIELD_DATA, \
-                        DIR_IMPORT_ROOT, DIR_REMOTE_MIRROR, DIR_IMPORT_DATESTAMPED, \
+                        DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
                         DIR_EXPORT
 
 
@@ -96,41 +96,47 @@ def update_import():
                     shutil.copy2(filepath, new_filepath)
 
 
-def update_remote_mirror():
-    # Sync from remote folder to local one to buffer before processing.
-    if os.name == "nt":
+def sync_from_remote(src, dest, purge=False):
+
+    if os.name=="nt" and purge:
+        flag = ["/purge"]
+    elif os.name=="posix" and purge:
+        flag = ["--delete-before"]
+    elif purge:
+        raise Exception("Unrecognized OS type: %s" % os.name)
+    else:
+        flag = []
+
+    if os.name=="nt":
         print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
-        returncode = subprocess.call(["robocopy", DIR_REMOTE, DIR_REMOTE_MIRROR,
-                                                    "/s", "/purge", "/compress"])
+        returncode = subprocess.call(["robocopy", src, dest, "/s", "/compress"] + flag)
                                         # "*.cpf", "/s", "/purge", "/compress"])
-        # Removes any extraneous files from local import folder that don't exist in remote.
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
-        print(colorama.Style.RESET_ALL)
 
-        # Check for success
-        if returncode < 8:
-            # https://superuser.com/questions/280425/getting-robocopy-to-return-a-proper-exit-code
-            # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
-            print("Sync successful\n")
-        else:
-            raise Exception("SYNC FAILED")
-    elif os.name == "posix":
+    elif os.name=="posix":
         print("Attempting to run rsync..." + colorama.Fore.YELLOW)
-        # CompProc = subprocess.run(["rsync", "-azivh",
-        CompProc = subprocess.run(["rsync", "-azivh", "--delete-before",
-            "%s/" % DIR_REMOTE, "%s/" % DIR_REMOTE_MIRROR], stderr=subprocess.STDOUT)
-        # Removes any extraneous files from local import folder that don't exist in remote.
-        print(colorama.Style.RESET_ALL)
+        CompProc = subprocess.run(["rsync", "-azivh"] + flag + ["%s/" % src,
+                                        "%s/" % dest], stderr=subprocess.STDOUT)
 
-        # Check for success
-        if CompProc.returncode == 0:
-            print("Sync successful\n")
-        else:
-            raise Exception("SYNC FAILED")
+    print(colorama.Style.RESET_ALL)
+
+    # Check for success
+    if (os.name=="nt" and returncode < 8) or (os.name=="posix" and CompProc.returncode == 0):
+        # https://superuser.com/questions/280425/getting-robocopy-to-return-a-proper-exit-code
+        # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
+        print("Sync to '%s' successful\n" % os.path.basename(dest))
     else:
-        raise Exception("Unrecognized OS type: %s" % os.name)
+        raise Exception("SYNC to '%s' FAILED" % os.path.basename(dest))
 
+
+def back_up_remote():
+    # Back up remote folder to local one before datestamping files on remote.
+    sync_from_remote(DIR_REMOTE, os.path.join(DIR_REMOTE_BU, "mirror"), purge=True)
+    # Removes any extraneous files from local import folder that don't exist in remote.
+
+    sync_from_remote(DIR_REMOTE, os.path.join(DIR_REMOTE_BU, "union"))
+    # Leaves all in place
 
 
 def convert_file(data_type, source_file_path, target_dir):
@@ -201,12 +207,19 @@ def create_file_struct():
     if not os.path.exists(DIR_FIELD_DATA):
         os.mkdir(DIR_FIELD_DATA)
         print("Created %s" % DIR_FIELD_DATA)
+
     if not os.path.exists(DIR_IMPORT_ROOT):
         os.mkdir(DIR_IMPORT_ROOT)
         print("Created %s" % DIR_IMPORT_ROOT)
-    if not os.path.exists(DIR_IMPORT_DATESTAMPED):
-        os.mkdir(DIR_IMPORT_DATESTAMPED)
-        print("Created %s" % DIR_IMPORT_DATESTAMPED)
+
+    if not os.path.exists(DIR_REMOTE_BU):
+        os.mkdir(DIR_REMOTE_BU)
+        print("Created %s" % DIR_REMOTE_BU)
+
+    if not os.path.exists(DIR_IMPORT):
+        os.mkdir(DIR_IMPORT)
+        print("Created %s" % DIR_IMPORT)
+
     if not os.path.exists(DIR_EXPORT):
         os.mkdir(DIR_EXPORT)
         print("Created %s" % DIR_EXPORT)
@@ -216,13 +229,13 @@ if __name__ == "__main__":
 
     create_file_struct()
 
-    # Pull from remote CPF dir.
-    if os.listdir(DIR_REMOTE_MIRROR):
+    # Pull from remote dir.
+    if os.listdir(DIR_IMPORT):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local '
                             'import folder from "%s" ? [Y / N]' % DIR_REMOTE)
         run_sync = input("> " + colorama.Style.RESET_ALL)
     else:
-        # If DIR_IMPORT_DATESTAMPED empty, don't prompt for sync. Just do it.
+        # If DIR_IMPORT empty, don't prompt for sync. Just do it.
         run_sync = "Y"
 
     if run_sync.upper() == "Y":
@@ -257,5 +270,5 @@ if __name__ == "__main__":
     # Allows moving mouse to upper-left corner of screen to abort execution.
     gui.PAUSE = 0.2 # 200 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
-    convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT, type="cpf")
+    convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
     print("\nGUI interaction done\n")
