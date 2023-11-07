@@ -2,6 +2,7 @@ import os
 import time
 import re
 import subprocess
+import shutil
 
 import colorama
 if os.name == "nt":
@@ -21,61 +22,78 @@ PROG_POS_Y=547
 DATE_FORMAT = "%Y%m%d"
 
 
-def datestamp_filenames(target_directory):
-    items = sorted(os.listdir(target_directory))
-    for n, file_name in enumerate(items):
-        filepath = os.path.join(target_directory, file_name)
-        item_name = os.path.splitext(file_name)[0]
-        ext = os.path.splitext(file_name)[-1]
-
-        # Check for date already present in filename
-        sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
-        # Any "3" or "5" or "8" followed by six more digits
-        sn_matches = re.findall(sn_regex, item_name, flags=re.IGNORECASE)
-        assert not len(sn_matches) > 1, 'More than one S/N match found in import filename "%s". Unhandled exception.' % file_name
-        assert len(sn_matches) == 1, 'No S/N match found in import filename "%s". Unhandled exception.' % file_name
-        serial_num = sn_matches[0]
-
-        # Now look for date in remaining string. Will add later if not present.
-        # Does not validate any existing datestamp in filename.
-        remaining_str = item_name.split(serial_num)
-        date_found = False
-        for substring in remaining_str:
-            if len(substring) >= len("20230101"): # long enough to be a date.
-                # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
-                # Any "20" followed by two digits,
-                    # followed by either "0" and a digit or "10", "11", or "12" (months)
-                        # followed by either "0", "1", or "2" paired with a digit (days 01-29)
-                        # or "30" or "31"
-
-                date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
-                # Any "20" followed by two digits,
-                    # followed by either "0" or "1" and any digit (months)
-                        # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
-                date_matches = re.findall(date_regex, substring, flags=re.IGNORECASE)
-
-                if len(date_matches) == 1:
-                    existing_datestamp = date_matches[0]
-                    date_found = True
-                elif len(date_matches) > 1:
-                    raise Exception("More than one date match found in import "
-                                "filename %s. Unhandled exception" % item_name)
-                else:
-                    pass
-            else:
-                pass
-
-        if date_found:
-            datestamp = existing_datestamp
+def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
+    found = None # Initialize variable for loop
+    while not found:
+        matches = re.findall(regex_pattern, string_to_search, flags=re.IGNORECASE)
+        if len(matches) == 1:
+            found = matches[0]
+            # loop exits
+        elif len(matches) == 0 and allow_none:
+            return None
         else:
-            # Add datestamp
-            # Find file last-modified time. Precise enough for our needs.
-            mod_date = time.strftime(DATE_FORMAT, time.localtime(os.path.getmtime(filepath)))
-            datestamp = mod_date
+            print(prompt)
+            string_to_search = input("> ")
+    return found
 
-        new_filename = "%s_%s%s" % (datestamp, serial_num, ext)
-        assert os.path.exists(filepath), "File not found for rename: %s" % filepath
-        os.rename(filepath, os.path.join(target_directory, new_filename))
+
+def update_import():
+    source_dir = DIR_REMOTE_MIRROR
+    target_dir = DIR_IMPORT_DATESTAMPED
+
+    for dirpath, dirnames, filenames in os.walk(source_dir):
+        for file_name in sorted(filenames):
+            filepath = os.path.join(dirpath, file_name)
+            item_name = os.path.splitext(file_name)[0]
+            ext = os.path.splitext(file_name)[-1]
+
+            if ext.lower() in (".cpf", ".cdf"):
+                # Find S/N in filename
+                sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
+                # Any "3" or "5" or "8" followed by six more digits
+                prompt_str = 'Can\'t parse S/N from import filename "%s". ' \
+                                                'Type S/N manually:' % file_name
+                serial_num = find_in_string(sn_regex, item_name, prompt_str)
+
+                # Now look for date in remaining string. Will add later if not present.
+                remaining_str = item_name.split(serial_num)
+                date_found = False
+                for substring in remaining_str:
+                    # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
+                    # Any "20" followed by two digits,
+                        # followed by either "0" and a digit or "10", "11", or "12" (months)
+                            # followed by either "0", "1", or "2" paired with a digit (days 01-29)
+                            # or "30" or "31"
+                    date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
+                    # Any "20" followed by two digits,
+                        # followed by either "0" or "1" and any digit (months)
+                            # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
+
+                    prompt_str = 'Found more than one date match in import ' \
+                                    'filename "%s". Type manually:' % file_name
+                    date_match = find_in_string(date_regex, substring, prompt_str, allow_none=True)
+
+                    if date_match:
+                        existing_datestamp = date_match
+
+                        date_found = True
+                    else:
+                        pass
+
+                if date_found:
+                    datestamp = existing_datestamp
+                else:
+                    # Add datestamp
+                    # Find file last-modified time. Precise enough for our needs.
+                    mod_date = time.localtime(os.path.getmtime(filepath))
+
+                    mod_date_str = time.strftime(DATE_FORMAT, mod_date)
+                    datestamp = mod_date_str
+
+                new_filename = "%s_%s%s" % (datestamp, serial_num, ext)
+                new_filepath = os.path.join(target_dir, new_filename)
+                if not os.path.exists(new_filepath):
+                    shutil.copy2(filepath, new_filepath)
 
 
 def update_remote_mirror():
@@ -113,6 +131,12 @@ def update_remote_mirror():
     else:
         raise Exception("Unrecognized OS type: %s" % os.name)
 
+
+
+def convert_file(data_type, source_file_path, target_dir):
+    if data_type.lower() == "cpf":
+        open_cpf(source_file_path)
+        export_cpf(target_dir, filename)
 
 
 def select_program():
@@ -158,20 +182,18 @@ def export_cpf(target_dir, filename):
     assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't confirm output file existence."
 
 
-def convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT):
-    import_files = sorted(os.listdir(DIR_IMPORT_DATESTAMPED))
-    for n, filename in enumerate(import_files):
-        select_program()
-        if (os.path.isfile(os.path.join(DIR_IMPORT_DATESTAMPED, filename)) and
-                            os.path.splitext(filename)[-1].lower() == ".cpf"):
+def convert_all(file_type, source_dir, dest_dir):
+    select_program()
+    for filename in sorted(os.listdir(source_dir)):
+        filepath = os.path.join(source_dir, filename)
+        if (os.path.isfile() and
+                    os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
             print("Processing %s..." % filename)
-            open_cpf(os.path.join(DIR_IMPORT_DATESTAMPED, filename))
-            export_cpf(DIR_EXPORT, filename)
+            convert_file(file_type, filepath)
             print("\tdone")
         else:
-            # Skip directories and non-CPFs
+            # Skip directories
             continue
-
 
 
 def create_file_struct():
@@ -205,7 +227,8 @@ if __name__ == "__main__":
 
     if run_sync.upper() == "Y":
         update_remote_mirror()
-        # datestamp_filenames()
+        update_import()
+
     else:
         print("Skipping import-dir update from remote.\n")
         # Accept any answer other than Y/y as negative.
@@ -234,5 +257,5 @@ if __name__ == "__main__":
     # Allows moving mouse to upper-left corner of screen to abort execution.
     gui.PAUSE = 0.2 # 200 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
-    convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT)
+    convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT, type="cpf")
     print("\nGUI interaction done\n")
