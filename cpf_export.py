@@ -246,6 +246,12 @@ def export_cpf(target_dir, filename_orig):
 
 
 def open_cdf(file_path):
+    # Ensure file is nonzero size. CIT gives error window for empty file.
+    if not os.path.getsize(file_path):
+        print("\tSkipping %s (empty file)." % os.path.basename(file_path))
+        # Skip file
+        return
+
     # Assumes CIT project open and Programmer window open, in focus.
     gui.press(["alt", "f", "i", "c"]) # Import file
 
