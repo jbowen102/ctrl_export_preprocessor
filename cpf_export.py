@@ -8,7 +8,10 @@ if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
 
-from dir_names import CPF_DIR, CPF_DIR_REMOTE, IMPORT_DIR, EXPORT_DIR
+from dir_names import DIR_REMOTE, \
+                      DIR_FIELD_DATA, \
+                        DIR_IMPORT_ROOT, DIR_REMOTE_MIRROR, DIR_IMPORT_DATESTAMPED, \
+                        DIR_EXPORT
 
 
 # Constants
@@ -75,12 +78,13 @@ def datestamp_filenames(target_directory):
         os.rename(filepath, os.path.join(target_directory, new_filename))
 
 
-def update_import_files():
+def update_remote_mirror():
     # Sync from remote folder to local one to buffer before processing.
     if os.name == "nt":
         print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
-        returncode = subprocess.call(["robocopy", CPF_DIR_REMOTE, IMPORT_DIR,
-                                                        "/purge", "/compress"])
+        returncode = subprocess.call(["robocopy", DIR_REMOTE, DIR_REMOTE_MIRROR,
+                                                    "/s", "/purge", "/compress"])
+                                        # "*.cpf", "/s", "/purge", "/compress"])
         # Removes any extraneous files from local import folder that don't exist in remote.
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
@@ -95,8 +99,9 @@ def update_import_files():
             raise Exception("SYNC FAILED")
     elif os.name == "posix":
         print("Attempting to run rsync..." + colorama.Fore.YELLOW)
+        # CompProc = subprocess.run(["rsync", "-azivh",
         CompProc = subprocess.run(["rsync", "-azivh", "--delete-before",
-                        CPF_DIR_REMOTE, IMPORT_DIR], stderr=subprocess.STDOUT)
+            "%s/" % DIR_REMOTE, "%s/" % DIR_REMOTE_MIRROR], stderr=subprocess.STDOUT)
         # Removes any extraneous files from local import folder that don't exist in remote.
         print(colorama.Style.RESET_ALL)
 
@@ -108,7 +113,6 @@ def update_import_files():
     else:
         raise Exception("Unrecognized OS type: %s" % os.name)
 
-    datestamp_filenames(IMPORT_DIR)
 
 
 def select_program():
@@ -154,57 +158,67 @@ def export_cpf(target_dir, filename):
     assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't confirm output file existence."
 
 
-def convert_all(import_dir, export_dir):
-    import_files = sorted(os.listdir(import_dir))
+def convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT):
+    import_files = sorted(os.listdir(DIR_IMPORT_DATESTAMPED))
     for n, filename in enumerate(import_files):
         select_program()
-        if (os.path.isfile(os.path.join(import_dir, filename)) and
+        if (os.path.isfile(os.path.join(DIR_IMPORT_DATESTAMPED, filename)) and
                             os.path.splitext(filename)[-1].lower() == ".cpf"):
             print("Processing %s..." % filename)
-            open_cpf(os.path.join(import_dir, filename))
-            export_cpf(export_dir, filename)
+            open_cpf(os.path.join(DIR_IMPORT_DATESTAMPED, filename))
+            export_cpf(DIR_EXPORT, filename)
             print("\tdone")
         else:
             # Skip directories and non-CPFs
             continue
 
 
+
+def create_file_struct():
+    # Make field-data dirs if any don't exist yet.
+    if not os.path.exists(DIR_FIELD_DATA):
+        os.mkdir(DIR_FIELD_DATA)
+        print("Created %s" % DIR_FIELD_DATA)
+    if not os.path.exists(DIR_IMPORT_ROOT):
+        os.mkdir(DIR_IMPORT_ROOT)
+        print("Created %s" % DIR_IMPORT_ROOT)
+    if not os.path.exists(DIR_IMPORT_DATESTAMPED):
+        os.mkdir(DIR_IMPORT_DATESTAMPED)
+        print("Created %s" % DIR_IMPORT_DATESTAMPED)
+    if not os.path.exists(DIR_EXPORT):
+        os.mkdir(DIR_EXPORT)
+        print("Created %s" % DIR_EXPORT)
+
+
 if __name__ == "__main__":
-    # Make CPF dirs if any don't exist yet.
-    if not os.path.exists(CPF_DIR):
-        os.mkdir(CPF_DIR)
-        print("Created %s" % CPF_DIR)
-    if not os.path.exists(IMPORT_DIR):
-        os.mkdir(IMPORT_DIR)
-        print("Created %s" % IMPORT_DIR)
+
+    create_file_struct()
 
     # Pull from remote CPF dir.
-    if os.listdir(IMPORT_DIR):
+    if os.listdir(DIR_REMOTE_MIRROR):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local '
-                            'import folder from "%s" ? [Y / N]' % CPF_DIR_REMOTE)
+                            'import folder from "%s" ? [Y / N]' % DIR_REMOTE)
         run_sync = input("> " + colorama.Style.RESET_ALL)
     else:
-        # If IMPORT_DIR empty, don't prompt for sync. Just do it.
-       run_sync = "Y"
+        # If DIR_IMPORT_DATESTAMPED empty, don't prompt for sync. Just do it.
+        run_sync = "Y"
 
     if run_sync.upper() == "Y":
-        update_import_files()
+        update_remote_mirror()
+        # datestamp_filenames()
     else:
-        print("Skipping import-dir update from network drive.\n")
+        print("Skipping import-dir update from remote.\n")
         # Accept any answer other than Y/y as negative.
         pass
 
-    if not os.path.exists(EXPORT_DIR):
-        os.mkdir(EXPORT_DIR)
-        print("Created %s" % EXPORT_DIR)
-    elif os.listdir(EXPORT_DIR):
+    if os.listdir(DIR_EXPORT):
         # Clear export dir before running?
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT +
                     "Export dir populated. Delete contents before processing? [Y / N]")
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer.upper() == "Y":
-            for item in sorted(os.listdir(EXPORT_DIR)):
-                os.remove(os.path.join(EXPORT_DIR, item))
+            for item in sorted(os.listdir(DIR_EXPORT)):
+                os.remove(os.path.join(DIR_EXPORT, item))
         else:
             # Accept any answer other than Y/y as negative.
             pass
@@ -220,5 +234,5 @@ if __name__ == "__main__":
     # Allows moving mouse to upper-left corner of screen to abort execution.
     gui.PAUSE = 0.2 # 200 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
-    convert_all(IMPORT_DIR, EXPORT_DIR)
+    convert_all(DIR_IMPORT_DATESTAMPED, DIR_EXPORT)
     print("\nGUI interaction done\n")
