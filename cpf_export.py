@@ -191,18 +191,15 @@ def convert_file(data_type, source_file_path, target_dir):
         open_cpf(source_file_path)
         export_cpf(target_dir, os.path.basename(source_file_path))
 
+    elif data_type.lower() == "cdf":
+        open_cdf(source_file_path)
+        export_cpf(target_dir, os.path.basename(source_file_path))
+
 
 def select_program():
     # Brings conversion program into focus.
-    # gui.click(PROG_POS_X, PROG_POS_Y) # Click on program to bring into focus
 
-    # input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-    #                 "\nBring target GUI to foreground then click back here "
-    #                             "and press Enter." + colorama.Style.RESET_ALL)
-    # print() # blank line
-    # gui.hotkey("alt", "tab")
-
-    answer = gui.confirm("Bring GUI into focus then click OK.")
+    answer = gui.confirm("Bring GUI into focus, make sure CAPSLOCK is off, then click OK.")
     if answer == "OK":
         print("\nGUI interaction commencing. Move mouse "
                                     "pointer to upper left of screen to abort.")
@@ -222,12 +219,12 @@ def open_cpf(file_path):
 
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(os.path.basename(file_path))
-    gui.press(["enter"]) # Confirm CPF filename to open.
-    time.sleep(1) # Allow time for CPF to open.
+    gui.press(["enter"]) # Confirm filename to open.
+    time.sleep(1) # Allow time for to open.
 
 
 def export_cpf(target_dir, filename_orig):
-    xls_filename = os.path.splitext(filename_orig)[0] + ".XLS"
+    xls_filename = os.path.splitext(filename_orig)[0] + "_cpf" + ".XLS"
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
@@ -247,6 +244,38 @@ def export_cpf(target_dir, filename_orig):
     # Check if new file exists in exported location as expected after conversion.
     assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't confirm output file existence."
 
+
+def open_cdf(file_path):
+    # Assumes CIT project open and Programmer window open, in focus.
+    gui.press(["alt", "f", "i", "c"]) # Import file
+
+    gui.hotkey("ctrl", "l") # Select address bar
+    gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
+    gui.press(["enter"])
+
+    gui.hotkey("alt", "n") # Select filename field
+    gui.typewrite(os.path.basename(file_path))
+    gui.press(["enter"]) # Confirm filename to open.
+    time.sleep(1) # Allow time for file to open.
+
+
+def export_cdf(target_dir, filename_orig):
+    xlsx_filename = os.path.splitext(filename_orig)[0] + "_CDF" + ".xlsx"
+    # Assumes CIT project open and Programmer window open, in focus.
+    gui.press(["alt", "f", "e", "s"]) # Export spreadsheet
+
+    gui.hotkey("alt", "n") # Select filename field
+    gui.typewrite(xlsx_filename)
+
+    gui.hotkey("ctrl", "l") # Select address bar
+    gui.typewrite(target_dir) # Navigate to target export folder.
+    gui.press(["enter"])
+    gui.hotkey("alt", "s") # Save
+    time.sleep(0.75)
+
+    gui.press(["enter"]) # Click through error
+
+    # Opens .xlsx file at end. Not sure how to suppress.
 
 def convert_all(file_type, source_dir, dest_dir):
     select_program()
@@ -304,13 +333,10 @@ if __name__ == "__main__":
             # Accept any answer other than Y/y as negative.
             pass
 
-    # input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-    #                 "\nReady for GUI interaction?" + colorama.Style.RESET_ALL)
-    # print() # blank line
-
     gui.FAILSAFE = True
     # Allows moving mouse to upper-left corner of screen to abort execution.
     gui.PAUSE = 0.2 # 200 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
     convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
+    convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
     print("\nGUI interaction done\n")
