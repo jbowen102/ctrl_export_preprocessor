@@ -4,6 +4,7 @@ import re
 import subprocess
 import shutil
 
+from tqdm import tqdm
 import colorama
 if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
@@ -37,63 +38,69 @@ def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
     return found
 
 
-def update_import():
-    source_dir = DIR_REMOTE_MIRROR
-    target_dir = DIR_IMPORT_DATESTAMPED
+def datestamp_remote(remote=DIR_REMOTE):
+    file_count = sum(len(files) for _, _, files in os.walk(remote))
+    # https://stackoverflow.com/questions/35969433/using-tqdm-on-a-for-loop-inside-a-function-to-check-progress
+    with tqdm(total=file_count, colour="#05e4ab") as pbar:
+        for dirpath, dirnames, filenames in os.walk(remote):
+            for file_name in sorted(filenames):
+                pbar.update(1)
+                filepath = os.path.join(dirpath, file_name)
+                item_name = os.path.splitext(file_name)[0]
+                ext = os.path.splitext(file_name)[-1]
 
-    for dirpath, dirnames, filenames in os.walk(source_dir):
-        for file_name in sorted(filenames):
-            filepath = os.path.join(dirpath, file_name)
-            item_name = os.path.splitext(file_name)[0]
-            ext = os.path.splitext(file_name)[-1]
+                if ext.lower() in (".cpf", ".cdf"):
+                    # Find S/N in filename
+                    sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
+                    # Any "3" or "5" or "8" followed by six more digits
+                    prompt_str = 'Can\'t parse S/N from import filename "%s". ' \
+                                                    'Type S/N manually:' % file_name
+                    serial_num = find_in_string(sn_regex, item_name, prompt_str)
 
-            if ext.lower() in (".cpf", ".cdf"):
-                # Find S/N in filename
-                sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
-                # Any "3" or "5" or "8" followed by six more digits
-                prompt_str = 'Can\'t parse S/N from import filename "%s". ' \
-                                                'Type S/N manually:' % file_name
-                serial_num = find_in_string(sn_regex, item_name, prompt_str)
+                    # Now look for date in remaining string. Will add later if not present.
+                    remaining_str = item_name.split(serial_num)
+                    date_found = False
+                    for substring in remaining_str:
+                        # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
+                        # Any "20" followed by two digits,
+                            # followed by either "0" and a digit or "10", "11", or "12" (months)
+                                # followed by either "0", "1", or "2" paired with a digit (days 01-29)
+                                # or "30" or "31"
+                        date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
+                        # Any "20" followed by two digits,
+                            # followed by either "0" or "1" and any digit (months)
+                                # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
 
-                # Now look for date in remaining string. Will add later if not present.
-                remaining_str = item_name.split(serial_num)
-                date_found = False
-                for substring in remaining_str:
-                    # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
-                    # Any "20" followed by two digits,
-                        # followed by either "0" and a digit or "10", "11", or "12" (months)
-                            # followed by either "0", "1", or "2" paired with a digit (days 01-29)
-                            # or "30" or "31"
-                    date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
-                    # Any "20" followed by two digits,
-                        # followed by either "0" or "1" and any digit (months)
-                            # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
+                        prompt_str = 'Found more than one date match in import ' \
+                                        'filename "%s". Type manually (YYYYMMDD ' \
+                                                            'format):' % file_name
+                        date_match = find_in_string(date_regex, substring, prompt_str, allow_none=True)
 
-                    prompt_str = 'Found more than one date match in import ' \
-                                    'filename "%s". Type manually:' % file_name
-                    date_match = find_in_string(date_regex, substring, prompt_str, allow_none=True)
+                        if date_match:
+                            existing_datestamp = date_match
+                            date_found = True
+                        else:
+                            pass
 
-                    if date_match:
-                        existing_datestamp = date_match
-
-                        date_found = True
+                    if date_found:
+                        datestamp = existing_datestamp
                     else:
-                        pass
+                        # Find file last-modified time. Precise enough for our needs.
+                        mod_date = time.localtime(os.path.getmtime(filepath))
 
-                if date_found:
-                    datestamp = existing_datestamp
-                else:
-                    # Add datestamp
-                    # Find file last-modified time. Precise enough for our needs.
-                    mod_date = time.localtime(os.path.getmtime(filepath))
+                        # Some files (CDF at least) have bogus mod dates - usually in 1999 or 2000.
+                        # In that case, use today's date.
+                        if mod_date < time.strptime("20200101", DATE_FORMAT):
+                            # Substitute in today's date
+                            date_to_use = time.localtime()
+                        else:
+                            date_to_use = mod_date
 
-                    mod_date_str = time.strftime(DATE_FORMAT, mod_date)
-                    datestamp = mod_date_str
+                        datestamp = time.strftime(DATE_FORMAT, date_to_use)
 
-                new_filename = "%s_%s%s" % (datestamp, serial_num, ext)
-                new_filepath = os.path.join(target_dir, new_filename)
-                if not os.path.exists(new_filepath):
-                    shutil.copy2(filepath, new_filepath)
+                    new_filename = "%s_sn%s%s" % (datestamp, serial_num, ext)
+                    new_filepath = os.path.join(dirpath, new_filename)
+                    os.rename(filepath, new_filepath)
 
 
 def sync_from_remote(src, dest, purge=False):
@@ -190,7 +197,7 @@ def export_cpf(target_dir, filename):
 
 def convert_all(file_type, source_dir, dest_dir):
     select_program()
-    for filename in sorted(os.listdir(source_dir)):
+    for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         filepath = os.path.join(source_dir, filename)
         if (os.path.isfile() and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
@@ -231,16 +238,25 @@ if __name__ == "__main__":
 
     # Pull from remote dir.
     if os.listdir(DIR_IMPORT):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local '
-                            'import folder from "%s" ? [Y / N]' % DIR_REMOTE)
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
+                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE)
         run_sync = input("> " + colorama.Style.RESET_ALL)
     else:
         # If DIR_IMPORT empty, don't prompt for sync. Just do it.
         run_sync = "Y"
 
     if run_sync.upper() == "Y":
-        update_remote_mirror()
-        update_import()
+
+        back_up_remote()
+
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
+                            'in remote directory "%s"? [Y / N]' % DIR_REMOTE)
+        update_dates = input("> " + colorama.Style.RESET_ALL)
+        if update_dates.upper() == "Y":
+            datestamp_remote()
+        else:
+            # currently unhandled
+            quit()
 
     else:
         print("Skipping import-dir update from remote.\n")
