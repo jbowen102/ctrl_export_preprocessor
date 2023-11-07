@@ -193,8 +193,21 @@ def convert_file(data_type, source_file_path, target_dir):
 
 
 def select_program():
-    # Brings 1314 program into focus.
-    gui.click(PROG_POS_X, PROG_POS_Y) # Click on program to bring into focus
+    # Brings conversion program into focus.
+    # gui.click(PROG_POS_X, PROG_POS_Y) # Click on program to bring into focus
+
+    # input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
+    #                 "\nBring target GUI to foreground then click back here "
+    #                             "and press Enter." + colorama.Style.RESET_ALL)
+    # print() # blank line
+    # gui.hotkey("alt", "tab")
+
+    answer = gui.confirm("Bring GUI into focus then click OK.")
+    if answer == "OK":
+        print("\nGUI interaction commencing. Move mouse "
+                                    "pointer to upper left of screen to abort.")
+    else:
+        raise Exception("User canceled.")
 
 
 def open_cpf(file_path):
@@ -291,12 +304,9 @@ if __name__ == "__main__":
             # Accept any answer other than Y/y as negative.
             pass
 
-    # answer = gui.confirm("Ready for GUI interaction?")
-    # if answer != "OK":
-    #     raise Exception("User canceled.")
-    input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-                    "\nReady for GUI interaction?" + colorama.Style.RESET_ALL)
-    print() # blank line
+    # input(colorama.Fore.GREEN + colorama.Style.BRIGHT +
+    #                 "\nReady for GUI interaction?" + colorama.Style.RESET_ALL)
+    # print() # blank line
 
     gui.FAILSAFE = True
     # Allows moving mouse to upper-left corner of screen to abort execution.
