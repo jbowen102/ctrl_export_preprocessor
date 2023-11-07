@@ -146,10 +146,50 @@ def back_up_remote():
     # Leaves all in place
 
 
+def remote_updates():
+    # Pull from remote dir.
+    if os.listdir(DIR_IMPORT):
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
+                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE)
+        run_bu = input("> " + colorama.Style.RESET_ALL)
+    else:
+        # If DIR_IMPORT empty, don't prompt for sync. Just do it.
+        run_bu = "Y"
+
+    if run_bu.upper() == "Y":
+        print("Backing up ...")
+        back_up_remote()
+        print("...done")
+    else:
+        print("Skipping remote BU.")
+
+    print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
+                    'in remote directory (datestamp) "%s"? [Y / N]' % DIR_REMOTE)
+    update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
+    if update_remote_filenames.upper() == "Y":
+        print("Updating remote filenames...")
+        datestamp_remote()
+        print("...done")
+    else:
+        # Accept any answer other than Y/y as negative.
+        print("Skipping remote-dir filename updates.")
+
+    print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local import '
+                                                    'dir from remote? [Y / N]')
+    update_import_dir = input("> " + colorama.Style.RESET_ALL)
+    if update_import_dir.upper() == "Y":
+        print("Updating local files from remote dir...")
+        sync_from_remote(os.path.join(DIR_REMOTE, "CDF Files/"), DIR_IMPORT, purge=True)
+        sync_from_remote(os.path.join(DIR_REMOTE, "CPF Files/"), DIR_IMPORT)
+        print("...done")
+    else:
+        print("Skipping import-dir update from remote.\n")
+
+
 def convert_file(data_type, source_file_path, target_dir):
     if data_type.lower() == "cpf":
         open_cpf(source_file_path)
-        export_cpf(target_dir, filename)
+        export_cpf(target_dir, os.path.basename(source_file_path))
 
 
 def select_program():
@@ -173,8 +213,8 @@ def open_cpf(file_path):
     time.sleep(1) # Allow time for CPF to open.
 
 
-def export_cpf(target_dir, filename):
-    xls_filename = os.path.splitext(filename)[0] + ".XLS"
+def export_cpf(target_dir, filename_orig):
+    xls_filename = os.path.splitext(filename_orig)[0] + ".XLS"
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
@@ -199,10 +239,10 @@ def convert_all(file_type, source_dir, dest_dir):
     select_program()
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         filepath = os.path.join(source_dir, filename)
-        if (os.path.isfile() and
+        if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
-            print("Processing %s..." % filename)
-            convert_file(file_type, filepath)
+            print("\nProcessing %s..." % filename)
+            convert_file(file_type, filepath, dest_dir)
             print("\tdone")
         else:
             # Skip directories
@@ -235,45 +275,18 @@ def create_file_struct():
 if __name__ == "__main__":
 
     create_file_struct()
-
-    # Pull from remote dir.
-    if os.listdir(DIR_IMPORT):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
-                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE)
-        run_sync = input("> " + colorama.Style.RESET_ALL)
-    else:
-        # If DIR_IMPORT empty, don't prompt for sync. Just do it.
-        run_sync = "Y"
-
-    if run_sync.upper() == "Y":
-
-        back_up_remote()
-
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
-                            'in remote directory "%s"? [Y / N]' % DIR_REMOTE)
-        update_dates = input("> " + colorama.Style.RESET_ALL)
-        if update_dates.upper() == "Y":
-            datestamp_remote()
-        else:
-            # currently unhandled
-            quit()
-
-        sync_from_remote(os.path.join(DIR_REMOTE, "CDF Files/"), DIR_IMPORT, purge=True)
-        sync_from_remote(os.path.join(DIR_REMOTE, "CPF Files/"), DIR_IMPORT)
-
-    else:
-        print("Skipping import-dir update from remote.\n")
-        # Accept any answer other than Y/y as negative.
-        pass
+    remote_updates()
 
     if os.listdir(DIR_EXPORT):
         # Clear export dir before running?
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-                    "Export dir populated. Delete contents before processing? [Y / N]")
+                "Export dir populated. Delete contents before processing? [Y / N]")
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer.upper() == "Y":
-            for item in sorted(os.listdir(DIR_EXPORT)):
+            print("Removing files...")
+            for item in tqdm(sorted(os.listdir(DIR_EXPORT)), colour="red"):
                 os.remove(os.path.join(DIR_EXPORT, item))
+            print("...done")
         else:
             # Accept any answer other than Y/y as negative.
             pass
