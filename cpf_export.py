@@ -258,6 +258,9 @@ if __name__ == "__main__":
             # currently unhandled
             quit()
 
+        sync_from_remote(os.path.join(DIR_REMOTE, "CDF Files/"), DIR_IMPORT, purge=True)
+        sync_from_remote(os.path.join(DIR_REMOTE, "CPF Files/"), DIR_IMPORT)
+
     else:
         print("Skipping import-dir update from remote.\n")
         # Accept any answer other than Y/y as negative.
