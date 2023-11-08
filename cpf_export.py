@@ -186,20 +186,20 @@ def remote_updates():
         print("Skipping import-dir update from remote.\n")
 
 
-def convert_file(data_type, source_file_path, target_dir):
-    if data_type.lower() == "cpf":
+def convert_file(source_file_path, target_dir):
+    file_type = os.path.splitext(source_file_path)[-1]
+    if file_type.lower() == ".cpf":
         open_cpf(source_file_path)
         export_cpf(target_dir, os.path.basename(source_file_path))
 
-    elif data_type.lower() == "cdf":
+    elif file_type.lower() == ".cdf":
         open_cdf(source_file_path)
-        export_cpf(target_dir, os.path.basename(source_file_path))
+        export_cdf(target_dir, os.path.basename(source_file_path))
 
 
-def select_program():
+def select_program(filetype):
     # Brings conversion program into focus.
-
-    answer = gui.confirm("Bring GUI into focus, make sure CAPSLOCK is off, then click OK.")
+    answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK is off, then click OK." % filetype.upper())
     if answer == "OK":
         print("\nGUI interaction commencing. Move mouse "
                                     "pointer to upper left of screen to abort.")
@@ -284,13 +284,13 @@ def export_cdf(target_dir, filename_orig):
     # Opens .xlsx file at end. Not sure how to suppress.
 
 def convert_all(file_type, source_dir, dest_dir):
-    select_program()
+    select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         filepath = os.path.join(source_dir, filename)
         if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
             print("\nProcessing %s..." % filename)
-            convert_file(file_type, filepath, dest_dir)
+            convert_file(filepath, dest_dir)
             print("\tdone")
         else:
             # Skip directories
