@@ -179,7 +179,7 @@ def remote_updates():
     while not os.path.exists(DIR_REMOTE_SRC):
         # Prompt user to mount network drives if not found.
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
-                                'and press Enter to try again.')
+                                'and press Enter to try again.' % DIR_REMOTE_SRC)
         input("> " + colorama.Style.RESET_ALL)
 
     if run_bu.upper() == "Y":
@@ -226,10 +226,6 @@ def convert_file(source_file_path, target_dir):
         export_path = export_cpf(target_dir, export_name)
 
         convert_export(export_path, os.path.splitext(export_name)[0] + ".xlsx")
-
-    elif file_type.upper() == ".XLS":
-        # Unconverted CPF export.
-        convert_export(source_file_path, os.path.splitext(export_name)[0] + ".xlsx")
 
     elif file_type.lower() == ".cdf":
         open_cdf(source_file_path)
@@ -331,9 +327,7 @@ def convert_all(file_type, source_dir, dest_dir):
     select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         # Check for existing export
-        if (os.path.exists(   os.path.join(DIR_EXPORT,
-                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX_TSV))
-            or os.path.exists(os.path.join(DIR_EXPORT,
+        if (os.path.exists(os.path.join(DIR_EXPORT,
                             os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))
             or os.path.exists(os.path.join(DIR_EXPORT,
                             os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX))):
@@ -346,6 +340,9 @@ def convert_all(file_type, source_dir, dest_dir):
             print("\nProcessing %s..." % filename)
             convert_file(filepath, dest_dir)
             print("\tdone")
+        elif file_type.upper() == ".XLS":
+            # Unconverted CPF export.
+            convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx")
         else:
             # Skip directories
             continue
