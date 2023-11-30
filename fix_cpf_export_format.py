@@ -13,7 +13,7 @@ def wait_for_input():
     input("\nEnd of Script. Press Enter to finish and close.")
 
 
-def convert_export(tsv_path, new_filename, replace=True):
+def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True):
     if not os.path.exists(tsv_path):
         print('Can\'t find source file "%s".' % os.path.basename(tsv_path))
         return
@@ -27,22 +27,28 @@ def convert_export(tsv_path, new_filename, replace=True):
         print('"%s" already exists. Skipping.' % new_filename)
         return new_filepath
 
-    # Determine if CPF export is a real XLS or TSV.
-    # https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
-    MagicObj = magic.detect_from_filename(tsv_path)
-    # Not based on extension, despite function name seeming to indicate that.
     tsv_mime_type = "text/plain"
     xls_mime_type = "application/vnd.ms-excel"
     xlsx_mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # Reference
+    if check_for_xls:
+        # Determine if CPF export is a real XLS or TSV.
+        # https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
+        MagicObj = magic.detect_from_filename(tsv_path)
+        # Not based on extension, despite function name seeming to indicate that.
 
-    if MagicObj.mime_type not in [tsv_mime_type, xls_mime_type]:
-        raise Exception('"%s" - Filetype not recognized (should be '
-                        'CPF export w/ .XLS extension)' % os.path.basename(tsv_path))
+        mime_type = MagicObj.mime_type
+        if mime_type not in [tsv_mime_type, xls_mime_type]:
+            raise Exception('"%s" - Filetype not recognized (should be '
+                            'CPF export w/ .XLS extension)' % os.path.basename(tsv_path))
+    else:
+        mime_type = tsv_mime_type
+        # Used in cases where this function gets called right after exporting
+        # from program, so we can be sure it's the raw export.
 
     with Workbook(new_filepath) as workbook:
         worksheet = workbook.add_worksheet("Parameters")
 
-        if MagicObj.mime_type == tsv_mime_type:
+        if mime_type == tsv_mime_type:
             # TSV masquerading as XLS
             tsv_reader = csv.reader(open(tsv_path, 'r'), delimiter='\t')
             for row, data in enumerate(tsv_reader):
@@ -50,7 +56,7 @@ def convert_export(tsv_path, new_filename, replace=True):
             # Borrowed from here
             # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
 
-        elif MagicObj.mime_type == xls_mime_type:
+        elif mime_type == xls_mime_type:
             # Real XLS
             xls_path = tsv_path
             with xlrd.open_workbook(xls_path) as xls_reader:

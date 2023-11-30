@@ -233,7 +233,7 @@ def convert_file(source_file_path, target_dir):
 
     elif file_type.lower() == ".cdf":
         open_cdf(source_file_path)
-        export_cdf(target_dir, export_name)
+        export_path = export_cdf(target_dir, export_name)
 
 
 def select_program(filetype):
@@ -346,7 +346,13 @@ def convert_all(file_type, source_dir, dest_dir):
             print("\tdone")
         elif file_type.upper() == ".XLS":
             # Unconverted CPF export.
-            convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx")
+            try:
+                convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx")
+            except AttributeError and os.name == "nt":
+                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+                print("Found %s in import folder. Process in WSL to employ magic module." % filename)
+                input("Press Enter to continue." + colorama.Style.RESET_ALL)
+                continue
         else:
             # Skip directories
             continue
