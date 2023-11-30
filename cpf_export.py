@@ -303,10 +303,10 @@ def convert_all(file_type, source_dir, dest_dir):
     select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         # Check for existing export
-        if (os.path.exists(os.path.join(DIR_EXPORT,
-                                             os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX)
-                        or os.path.join(DIR_EXPORT,
-                                             os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX)):
+        if (os.path.exists(   os.path.join(DIR_EXPORT,
+                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))
+            or os.path.exists(os.path.join(DIR_EXPORT,
+                            os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX))):
             # Skip if already processed this file.
             continue
 
