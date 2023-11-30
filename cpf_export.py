@@ -363,3 +363,7 @@ if __name__ == "__main__":
         print("\nGUI interaction done\n")
     else:
         print("Skipping GUI interaction (requires Windows system.)")
+
+    print("Syncing processed files to shared folder...")
+    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Processed"), purge=True)
+    print("...done")
