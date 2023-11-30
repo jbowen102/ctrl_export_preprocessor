@@ -113,12 +113,16 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                     new_filepath = os.path.join(dirpath, new_filename)
                     os.rename(filepath, new_filepath)
 
-                    old_names.append(file_name)
-                    new_names.append(new_filename)
+                    if file_name != new_filename:
+                        old_names.append(file_name)
+                        new_names.append(new_filename)
 
     print("Renames:")
-    for i, name in enumerate(old_names):
-        print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
+    if len(old_names > 0):
+        for i, name in enumerate(old_names):
+            print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
+    else:
+        print(colorama.Fore.MAGENTA + "[None]")
     input(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nPress Enter to continue")
     print(colorama.Style.RESET_ALL)
 
