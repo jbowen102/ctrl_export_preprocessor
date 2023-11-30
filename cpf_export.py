@@ -44,6 +44,11 @@ def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
+
+    # Keep track of renames for display later.
+    old_names = []
+    new_names = []
+
     file_count = sum(len(files) for _, _, files in os.walk(remote))
     # https://stackoverflow.com/questions/35969433/using-tqdm-on-a-for-loop-inside-a-function-to-check-progress
     with tqdm(total=file_count, colour="#05e4ab") as pbar:
@@ -106,6 +111,15 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                     new_filename = "%s_sn%s%s" % (datestamp, serial_num, ext)
                     new_filepath = os.path.join(dirpath, new_filename)
                     os.rename(filepath, new_filepath)
+
+                    old_names.append(file_name)
+                    new_names.append(new_filename)
+
+    print("Renames:")
+    for i, name in enumerate(old_names):
+        print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
+    input(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nPress Enter to continue")
+    print(colorama.Style.RESET_ALL)
 
 
 def sync_remote(src, dest, purge=False):
