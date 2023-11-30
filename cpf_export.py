@@ -15,10 +15,11 @@ if os.name == "nt":
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
-from dir_names import DIR_REMOTE, \
+from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
-                        DIR_EXPORT
+                        DIR_EXPORT, \
+                      DIR_REMOTE_SHARE
 
 
 DATE_FORMAT = "%Y%m%d"
@@ -42,7 +43,7 @@ def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
     return found
 
 
-def datestamp_remote(remote=DIR_REMOTE):
+def datestamp_remote(remote=DIR_REMOTE_SRC):
     file_count = sum(len(files) for _, _, files in os.walk(remote))
     # https://stackoverflow.com/questions/35969433/using-tqdm-on-a-for-loop-inside-a-function-to-check-progress
     with tqdm(total=file_count, colour="#05e4ab") as pbar:
@@ -107,7 +108,7 @@ def datestamp_remote(remote=DIR_REMOTE):
                     os.rename(filepath, new_filepath)
 
 
-def sync_from_remote(src, dest, purge=False):
+def sync_remote(src, dest, purge=False):
 
     if os.name=="nt" and purge:
         flag = ["/purge"]
@@ -142,11 +143,11 @@ def sync_from_remote(src, dest, purge=False):
 
 
 def back_up_remote():
-    # Back up remote folder to local one before datestamping files on remote.
-    sync_from_remote(DIR_REMOTE, os.path.join(DIR_REMOTE_BU, "mirror"), purge=True)
+    # Back up remote source contents before datestamping files on remote.
+    sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_BU, "mirror"), purge=True)
     # Removes any extraneous files from local import folder that don't exist in remote.
 
-    sync_from_remote(DIR_REMOTE, os.path.join(DIR_REMOTE_BU, "union"))
+    sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_BU, "union"))
     # Leaves all in place
 
 
@@ -154,7 +155,7 @@ def remote_updates():
     # Pull from remote dir.
     if os.listdir(DIR_IMPORT):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
-                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE)
+                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE_SRC)
         run_bu = input("> " + colorama.Style.RESET_ALL)
     else:
         # If DIR_IMPORT empty, don't prompt for sync. Just do it.
@@ -168,11 +169,16 @@ def remote_updates():
         print("Skipping remote BU.")
 
     print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
-                    'in remote directory (datestamp) "%s"? [Y / N]' % DIR_REMOTE)
+                    'in remote directory (datestamp) "%s"? [Y / N]' % DIR_REMOTE_SRC)
     update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
     if update_remote_filenames.upper() == "Y":
         print("Updating remote filenames...")
         datestamp_remote()
+        print("...done")
+
+        # Also back up to shared folder for reference.
+        print("Syncing source files to shared folder...")
+        sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_SHARE, "Raw"), purge=True)
         print("...done")
     else:
         # Accept any answer other than Y/y as negative.
@@ -183,8 +189,8 @@ def remote_updates():
     update_import_dir = input("> " + colorama.Style.RESET_ALL)
     if update_import_dir.upper() == "Y":
         print("Updating local files from remote dir...")
-        sync_from_remote(os.path.join(DIR_REMOTE, "CDF Files/"), DIR_IMPORT, purge=True)
-        sync_from_remote(os.path.join(DIR_REMOTE, "CPF Files/"), DIR_IMPORT)
+        sync_remote(os.path.join(DIR_REMOTE_SRC, "CDF Files/"), DIR_IMPORT, purge=True)
+        sync_remote(os.path.join(DIR_REMOTE_SRC, "CPF Files/"), DIR_IMPORT)
         print("...done")
     else:
         print("Skipping import-dir update from remote.\n")
