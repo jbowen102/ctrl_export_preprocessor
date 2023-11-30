@@ -9,6 +9,11 @@ import colorama
 if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
+    gui.FAILSAFE = True
+    # Allows moving mouse to upper-left corner of screen to abort execution.
+    gui.PAUSE = 0.2 # 200 ms pause after each command.
+    # https://pyautogui.readthedocs.io/en/latest/quickstart.html
+
 
 from dir_names import DIR_REMOTE, \
                       DIR_FIELD_DATA, \
@@ -339,10 +344,9 @@ if __name__ == "__main__":
             # Accept any answer other than Y/y as negative.
             pass
 
-    gui.FAILSAFE = True
-    # Allows moving mouse to upper-left corner of screen to abort execution.
-    gui.PAUSE = 0.2 # 200 ms pause after each command.
-    # https://pyautogui.readthedocs.io/en/latest/quickstart.html
-    convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
-    convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
-    print("\nGUI interaction done\n")
+    if os.name == "nt":
+        convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
+        convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
+        print("\nGUI interaction done\n")
+    else:
+        print("Skipping GUI interaction (requires Windows system.)")
