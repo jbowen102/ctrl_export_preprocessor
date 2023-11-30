@@ -161,6 +161,12 @@ def remote_updates():
         # If DIR_IMPORT empty, don't prompt for sync. Just do it.
         run_bu = "Y"
 
+    while not os.path.exists(DIR_REMOTE_SRC):
+        # Prompt user to mount network drives if not found.
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
+                                'and press Enter to try again.')
+        input("> " + colorama.Style.RESET_ALL)
+
     if run_bu.upper() == "Y":
         print("Backing up ...")
         back_up_remote()
