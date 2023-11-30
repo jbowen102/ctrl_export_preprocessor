@@ -21,11 +21,10 @@ from dir_names import DIR_REMOTE, \
                         DIR_EXPORT
 
 
-# Constants
-PROG_POS_X=1433
-PROG_POS_Y=547
-
 DATE_FORMAT = "%Y%m%d"
+
+CDF_EXPORT_SUFFIX = "_CDF.xlsx"
+CPF_EXPORT_SUFFIX = "_cpf.XLS"
 
 
 def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
@@ -229,7 +228,7 @@ def open_cpf(file_path):
 
 
 def export_cpf(target_dir, filename_orig):
-    xls_filename = os.path.splitext(filename_orig)[0] + "_cpf" + ".XLS"
+    xls_filename = os.path.splitext(filename_orig)[0] + CPF_EXPORT_SUFFIX
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
@@ -271,7 +270,7 @@ def open_cdf(file_path):
 
 
 def export_cdf(target_dir, filename_orig):
-    xlsx_filename = os.path.splitext(filename_orig)[0] + "_CDF" + ".xlsx"
+    xlsx_filename = os.path.splitext(filename_orig)[0] + CDF_EXPORT_SUFFIX
     # Assumes CIT project open and Programmer window open, in focus.
     gui.press(["alt", "f", "e", "s"]) # Export spreadsheet
 
@@ -291,6 +290,14 @@ def export_cdf(target_dir, filename_orig):
 def convert_all(file_type, source_dir, dest_dir):
     select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
+        # Check for existing export
+        if (os.path.exists(os.path.join(DIR_EXPORT,
+                                             os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX)
+                        or os.path.join(DIR_EXPORT,
+                                             os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX)):
+            # Skip if already processed this file.
+            continue
+
         filepath = os.path.join(source_dir, filename)
         if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
