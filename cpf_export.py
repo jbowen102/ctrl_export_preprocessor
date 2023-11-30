@@ -11,7 +11,7 @@ if os.name == "nt":
     import pyautogui as gui
     gui.FAILSAFE = True
     # Allows moving mouse to upper-left corner of screen to abort execution.
-    gui.PAUSE = 0.2 # 200 ms pause after each command.
+    gui.PAUSE = 0.5 # 500 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
@@ -364,12 +364,19 @@ if __name__ == "__main__":
             pass
 
     if os.name == "nt":
-        convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
-        convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
-        print("\nGUI interaction done\n")
+        try:
+            convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
+            convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
+            print("\nGUI interaction done\n")
+        except gui.FailSafeException:
+            print(colorama.Fore.RED + colorama.Style.BRIGHT + "\n\nUser canceled GUI interaction.")
+            print(colorama.Style.RESET_ALL)
+            time.sleep(3)
+            # If user terminates GUI interraction, continue running below.
+            pass
     else:
         print("Skipping GUI interaction (requires Windows system.)")
 
     print("Syncing processed files to shared folder...")
-    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Processed"), purge=True)
+    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True)
     print("...done")
