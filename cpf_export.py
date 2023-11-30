@@ -15,6 +15,7 @@ if os.name == "nt":
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
+from fix_cpf_export_format import convert_export
 from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
@@ -25,8 +26,8 @@ from dir_names import DIR_REMOTE_SRC, \
 DATE_FORMAT = "%Y%m%d"
 
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
-CPF_EXPORT_SUFFIX = "_cpf.XLS"
-
+CPF_EXPORT_SUFFIX_TSV = "_cpf.XLS"
+CPF_EXPORT_SUFFIX = "_cpf.xlsx"
 
 def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
     found = None # Initialize variable for loop
@@ -218,13 +219,21 @@ def remote_updates():
 
 def convert_file(source_file_path, target_dir):
     file_type = os.path.splitext(source_file_path)[-1]
+    export_name = os.path.basename(source_file_path)
+
     if file_type.lower() == ".cpf":
         open_cpf(source_file_path)
-        export_cpf(target_dir, os.path.basename(source_file_path))
+        export_path = export_cpf(target_dir, export_name)
+
+        convert_export(export_path, os.path.splitext(export_name)[0] + ".xlsx")
+
+    elif file_type.upper() == ".XLS":
+        # Unconverted CPF export.
+        convert_export(source_file_path, os.path.splitext(export_name)[0] + ".xlsx")
 
     elif file_type.lower() == ".cdf":
         open_cdf(source_file_path)
-        export_cdf(target_dir, os.path.basename(source_file_path))
+        export_cdf(target_dir, export_name)
 
 
 def select_program(filetype):
@@ -254,7 +263,7 @@ def open_cpf(file_path):
 
 
 def export_cpf(target_dir, filename_orig):
-    xls_filename = os.path.splitext(filename_orig)[0] + CPF_EXPORT_SUFFIX
+    xls_filename = os.path.splitext(filename_orig)[0] + CPF_EXPORT_SUFFIX_TSV
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
@@ -272,7 +281,9 @@ def export_cpf(target_dir, filename_orig):
     gui.hotkey("ctrl", "f4") # Close CPF file.
 
     # Check if new file exists in exported location as expected after conversion.
-    assert os.path.exists(os.path.join(target_dir, xls_filename)), "Can't confirm output file existence."
+    export_path = os.path.join(target_dir, xls_filename)
+    assert os.path.exists(export_path), "Can't confirm output file existence."
+    return export_path
 
 
 def open_cdf(file_path):
@@ -313,11 +324,16 @@ def export_cdf(target_dir, filename_orig):
 
     # Opens .xlsx file at end. Not sure how to suppress.
 
+    return os.path.join(target_dir, xlsx_filename)
+
+
 def convert_all(file_type, source_dir, dest_dir):
     select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         # Check for existing export
         if (os.path.exists(   os.path.join(DIR_EXPORT,
+                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX_TSV))
+            or os.path.exists(os.path.join(DIR_EXPORT,
                             os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))
             or os.path.exists(os.path.join(DIR_EXPORT,
                             os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX))):
