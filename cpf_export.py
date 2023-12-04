@@ -29,19 +29,34 @@ CDF_EXPORT_SUFFIX = "_CDF.xlsx"
 CPF_EXPORT_SUFFIX_TSV = "_cpf.XLS"
 CPF_EXPORT_SUFFIX = "_cpf.xlsx"
 
-def find_in_string(regex_pattern, string_to_search, prompt, allow_none=False):
+def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, allow_none=False):
     found = None # Initialize variable for loop
     while not found:
         matches = re.findall(regex_pattern, string_to_search, flags=re.IGNORECASE)
-        if len(matches) == 1:
+        if len(matches) == 1 and date_target:
+            # If looking for a date, check for valid date value (regex doesn't fully validate)
+            # print("\t\tmatches[0]: " + matches[0]) # DEBUG
+            try:
+                time.strptime(matches[0], DATE_FORMAT)
+            except ValueError:
+                # Fall through to prompt user for manual entry.
+                pass
+            else:
+                # Valid date
+                found = matches[0]
+                # print("\t\t%s: found %s (date that passed both checks)" % (string_to_search, found)) # DEBUG
+                return found
+        elif len(matches) == 1:
             found = matches[0]
+            return found
             # loop exits
         elif len(matches) == 0 and allow_none:
+            # print("\t\t%s: no matches; returning None" % string_to_search) # DEBUG
             return None
-        else:
-            print(prompt)
-            string_to_search = input("> ")
-    return found
+
+        # No matches, or invalid date found:
+        print(prompt)
+        string_to_search = input("> ")
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
@@ -66,9 +81,10 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                     # Any "3" or "5" or "8" followed by six more digits
                     prompt_str = 'Can\'t parse S/N from import filename "%s". ' \
                                                     'Type S/N manually:' % file_name
+                    # print("\n\tS/N:") # DEBUG
                     serial_num = find_in_string(sn_regex, item_name, prompt_str)
-
                     # Now look for date in remaining string. Will add later if not present.
+                    # print("\tReceived %s as S/N back from find_in_string()" % serial_num) # DEBUG
                     remaining_str = item_name.split(serial_num)
                     date_found = False
                     for substring in remaining_str:
@@ -80,18 +96,21 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                         date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
                         # Any "20" followed by two digits,
                             # followed by either "0" or "1" and any digit (months)
-                                # followed by either "0", "1", "2", or "3" paired with a digit (days 01-31)
+                                # followed by either "0", "1", "2", or "3" paired with any digit (days 01-31)
+                        # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
 
-                        prompt_str = 'Found more than one date match in import ' \
+                        prompt_str = 'Can\'t find single valid date match in import ' \
                                         'filename "%s". Type manually (YYYYMMDD ' \
                                                             'format):' % file_name
-                        date_match = find_in_string(date_regex, substring, prompt_str, allow_none=True)
+                        # print("\tDate:") # DEBUG
+                        date_match = find_in_string(date_regex, substring,
+                                    prompt_str, date_target=True, allow_none=True)
+                        # print("\tReceived %s as date back from find_in_string()" % date_match) # DEBUG
 
-                        if date_match:
-                            existing_datestamp = date_match
+                        if date_match is not None:
                             date_found = True
-                        else:
-                            pass
+                            existing_datestamp = date_match
+                            break
 
                     if date_found:
                         datestamp = existing_datestamp
@@ -116,6 +135,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                     if file_name != new_filename:
                         old_names.append(file_name)
                         new_names.append(new_filename)
+                # input("> ") # DEBUG
 
     print("Renames:")
     if len(old_names) > 0:
