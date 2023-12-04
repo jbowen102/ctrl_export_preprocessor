@@ -4,6 +4,7 @@ import xlrd
 import argparse
 from datetime import datetime
 
+import colorama
 from tqdm import tqdm
 import magic
 from xlsxwriter.workbook import Workbook
@@ -24,58 +25,70 @@ def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True):
     new_filepath = os.path.join(os.path.dirname(tsv_path), new_filename)
     if os.path.exists(new_filepath):
         # Don't overwrite
-        print('"%s" already exists. Skipping.' % new_filename)
-        return new_filepath
-
-    tsv_mime_type = "text/plain"
-    xls_mime_type = "application/vnd.ms-excel"
-    xlsx_mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # Reference
-    if check_for_xls:
-        # Determine if CPF export is a real XLS or TSV.
-        # https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
-        MagicObj = magic.detect_from_filename(tsv_path)
-        # Not based on extension, despite function name seeming to indicate that.
-
-        mime_type = MagicObj.mime_type
-        if mime_type not in [tsv_mime_type, xls_mime_type]:
-            raise Exception('"%s" - Filetype not recognized (should be '
-                            'CPF export w/ .XLS extension)' % os.path.basename(tsv_path))
+        pass
+        # Fall through to bottom to remove .XLS if specified.
+        # print('"%s" already exists. Skipping.' % new_filename) # DEBUG
     else:
-        mime_type = tsv_mime_type
-        # Used in cases where this function gets called right after exporting
-        # from program, so we can be sure it's the raw export.
+        tsv_mime_type = "text/plain"
+        xls_mime_type = "application/vnd.ms-excel"
+        xlsx_mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # Reference
+        if check_for_xls:
+            # Determine if CPF export is a real XLS or TSV.
+            # https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
+            MagicObj = magic.detect_from_filename(tsv_path)
+            # Not based on extension, despite function name seeming to indicate that.
 
-    with Workbook(new_filepath) as workbook:
-        worksheet = workbook.add_worksheet("Parameters")
+            mime_type = MagicObj.mime_type
+            if mime_type not in [tsv_mime_type, xls_mime_type]:
+                raise Exception('"%s" - Filetype not recognized (should be '
+                                'CPF export w/ .XLS extension)' % os.path.basename(tsv_path))
+        else:
+            mime_type = tsv_mime_type
+            # Used in cases where this function gets called right after exporting
+            # from program, so we can be sure it's the raw export.
 
-        if mime_type == tsv_mime_type:
-            # TSV masquerading as XLS
-            tsv_reader = csv.reader(open(tsv_path, 'r'), delimiter='\t')
-            for row, data in enumerate(tsv_reader):
-                worksheet.write_row(row, 0, data)
-            # Borrowed from here
-            # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
+        with Workbook(new_filepath) as workbook:
+            worksheet = workbook.add_worksheet("Parameters")
 
-        elif mime_type == xls_mime_type:
-            # Real XLS
-            xls_path = tsv_path
-            with xlrd.open_workbook(xls_path) as xls_reader:
-                xls_sheet = xls_reader.sheet_by_index(0)
-                for row in range(xls_sheet.nrows):
-                    data = xls_sheet.row_values(row)
+            if mime_type == tsv_mime_type:
+                # TSV masquerading as XLS
+                tsv_reader = csv.reader(open(tsv_path, 'r'), delimiter='\t')
+                for row, data in enumerate(tsv_reader):
                     worksheet.write_row(row, 0, data)
+                # Borrowed from here
+                # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
 
-    if os.path.exists(new_filepath): # Confirm
+            elif mime_type == xls_mime_type:
+                # Real XLS
+                xls_path = tsv_path
+                with xlrd.open_workbook(xls_path) as xls_reader:
+                    xls_sheet = xls_reader.sheet_by_index(0)
+                    for row in range(xls_sheet.nrows):
+                        data = xls_sheet.row_values(row)
+                        worksheet.write_row(row, 0, data)
+
+    if os.path.exists(new_filepath): # Confirm output file existence before deleting source file.
         if replace:
-            os.remove(tsv_path) # Delete tsv file
-
-        return new_filepath
+            try:
+                os.remove(tsv_path) # Delete tsv file
+                # Not working yet in PowerShell intermittently (throws PermissionError)
+                # https://stackoverflow.com/questions/68344233/os-remove-permissionerror-winerror-32-the-process-cannot-access-the-file-be
+                print("\nRemoved %s" % os.path.basename(tsv_path)) # DEBUG
+            except PermissionError:
+                print(colorama.Fore.YELLOW)
+                print("Error removing %s" % os.path.basename(tsv_path) + colorama.Style.RESET_ALL)
+                perm_error = True
+                pass
+            else:
+                perm_error = False
+        return new_filepath, perm_error
     else:
         raise Exception("Can't find export %s converted from %s" % (new_filepath, tsv_path))
 
 
-def convert_all_exports(dir_path):
-    for tsv_item in tqdm(sorted(os.listdir(dir_path)), colour="yellow"):
+def convert_all_exports(dir_path, check_xls=True):
+    file_list = [x for x in sorted(os.listdir(dir_path)) if x.upper().endswith(".XLS")]
+    for tsv_item in tqdm(file_list, colour="yellow"):
         tsv_item_path = os.path.join(dir_path, tsv_item)
         if os.path.isdir(tsv_item_path):
             # print("%s not a file." % item)
@@ -84,7 +97,10 @@ def convert_all_exports(dir_path):
             continue
 
         new_xlsx_filename = os.path.splitext(tsv_item_path)[0] + ".xlsx"
-        convert_export(tsv_item_path, new_xlsx_filename)
+        converted_file_path, perm_error = convert_export(tsv_item_path,
+                        new_xlsx_filename, check_for_xls=check_xls, replace=True)
+        if perm_error:
+            raise PermissionError
 
 
 def convert_and_aggregate_exports(dir_path):

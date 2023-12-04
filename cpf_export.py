@@ -15,7 +15,7 @@ if os.name == "nt":
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
-from fix_cpf_export_format import convert_export
+from fix_cpf_export_format import convert_export, convert_all_exports
 from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
@@ -28,6 +28,7 @@ DATE_FORMAT = "%Y%m%d"
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
 CPF_EXPORT_SUFFIX_TSV = "_cpf.XLS"
 CPF_EXPORT_SUFFIX = "_cpf.xlsx"
+
 
 def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, allow_none=False):
     found = None # Initialize variable for loop
@@ -270,8 +271,9 @@ def convert_file(source_file_path, target_dir):
     if file_type.lower() == ".cpf":
         open_cpf(source_file_path)
         export_path = export_cpf(target_dir, export_name)
-
-        convert_export(export_path, os.path.splitext(export_name)[0] + ".xlsx")
+        # convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
+        #                                     check_for_xls=False, replace=False)
+        # # Keep getting PermissionError when run in PowerShell w/ replace=True.
 
     elif file_type.lower() == ".cdf":
         open_cdf(source_file_path)
@@ -282,8 +284,10 @@ def select_program(filetype):
     # Brings conversion program into focus.
     answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK is off, then click OK." % filetype.upper())
     if answer == "OK":
-        print("\nGUI interaction commencing. Move mouse "
-                                    "pointer to upper left of screen to abort.")
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + "\nGUI interaction "
+                        "commencing (%s). Move mouse pointer to upper left of "
+                                        "screen to abort." % filetype.upper())
+        print(colorama.Style.RESET_ALL)
     else:
         raise Exception("User canceled.")
 
@@ -388,25 +392,38 @@ def convert_all(file_type, source_dir, dest_dir):
         raise Exception("Can't find dest_dir '%s'" % dest_dir)
 
     select_program(file_type)
-    for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
+    file_list = [x for x in sorted(os.listdir(source_dir)) if x.lower().endswith(file_type)]
+    for filename in tqdm(file_list, colour="cyan"):
         # Check for existing export
-        if (os.path.exists(os.path.join(DIR_EXPORT,
-                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))
+        if file_type == "cpf" and (os.path.exists(os.path.join(DIR_EXPORT,
+                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX_TSV))
             or os.path.exists(os.path.join(DIR_EXPORT,
+                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))):
+            # Skip if already processed this file.
+            tqdm.write("Already processed %s" % os.path.basename(filename)) # DEBUG
+            continue
+        elif file_type == "cdf" and (os.path.exists(os.path.join(DIR_EXPORT,
                             os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX))):
             # Skip if already processed this file.
+            tqdm.write("Already processed %s" % os.path.basename(filename)) # DEBUG
             continue
 
         filepath = os.path.join(source_dir, filename)
         if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
-            print("\nProcessing %s..." % filename)
-            convert_file(filepath, dest_dir)
-            print("\tdone")
-        elif file_type.upper() == ".XLS":
-            # Unconverted CPF export.
             try:
-                convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx")
+                convert_file(filepath, dest_dir)
+            except Exception as exception_text:
+                print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
+                print("\nEncountered exception processing %s\n" % filename + colorama.Style.RESET_ALL)
+                raise Exception(exception_text)
+            else:
+                tqdm.write("Processed %s" % filename)
+        elif file_type.upper() == ".XLS":
+            # Unconverted CPF export in import folder.
+            try:
+                convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx", replace=False)
+                # Keep getting PermissionError when run in PowerShell w/ replace=True.
             except AttributeError and os.name == "nt":
                 print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
                 print("Found %s in import folder. Process in WSL to employ magic module." % filename)
@@ -415,6 +432,19 @@ def convert_all(file_type, source_dir, dest_dir):
         else:
             # Skip directories
             continue
+
+    if file_type == "cpf":
+        # Convert CPF exports (.XLS extension but TSV format) to true Excel format.
+        # Gets a PermissionError if running on PowerShell most of the time.
+        print("\nConverting CPF exports from tsv format (named .XLS) to .xslx...")
+        try:
+            convert_all_exports(dest_dir, check_xls=False)
+            print("...done")
+        except PermissionError:
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            input("\nEncountered permission error in removing CPF tsv files.\n"
+                            "Press Enter to continue to next part of program.")
+            print(colorama.Style.RESET_ALL)
 
 
 def create_file_struct():
@@ -463,7 +493,8 @@ if __name__ == "__main__":
         try:
             convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
             convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
-            print("\nGUI interaction done\n")
+            print(colorama.Fore.RED + colorama.Style.BRIGHT + "\nGUI interaction done\n")
+            print(colorama.Style.RESET_ALL)
         except gui.FailSafeException:
             print(colorama.Fore.RED + colorama.Style.BRIGHT + "\n\nUser canceled GUI interaction.")
             print(colorama.Style.RESET_ALL)
@@ -471,7 +502,8 @@ if __name__ == "__main__":
             # If user terminates GUI interraction, continue running below.
             pass
     else:
-        print("Skipping GUI interaction (requires Windows system.)")
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + "Skipping GUI interaction (requires Windows system.)")
+        print(colorama.Style.RESET_ALL)
 
     print("Syncing processed files to shared folder...")
     sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True)
