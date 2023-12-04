@@ -14,7 +14,7 @@ def wait_for_input():
     input("\nEnd of Script. Press Enter to finish and close.")
 
 
-def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True):
+def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True, tqdm_obj=None):
     if not os.path.exists(tsv_path):
         print('Can\'t find source file "%s".' % os.path.basename(tsv_path))
         return
@@ -23,12 +23,8 @@ def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True):
                         'CPF export w/ .XLS extension)' % os.path.basename(tsv_path))
 
     new_filepath = os.path.join(os.path.dirname(tsv_path), new_filename)
-    if os.path.exists(new_filepath):
-        # Don't overwrite
-        pass
-        # Fall through to bottom to remove .XLS if specified.
-        # print('"%s" already exists. Skipping.' % new_filename) # DEBUG
-    else:
+    if not os.path.exists(new_filepath):
+        # Don't overwrite existing output file if it exists.
         tsv_mime_type = "text/plain"
         xls_mime_type = "application/vnd.ms-excel"
         xlsx_mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # Reference
@@ -67,28 +63,28 @@ def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True):
                         data = xls_sheet.row_values(row)
                         worksheet.write_row(row, 0, data)
 
-    if os.path.exists(new_filepath): # Confirm output file existence before deleting source file.
-        if replace:
-            try:
-                os.remove(tsv_path) # Delete tsv file
-                # Not working yet in PowerShell intermittently (throws PermissionError)
-                # https://stackoverflow.com/questions/68344233/os-remove-permissionerror-winerror-32-the-process-cannot-access-the-file-be
-                print("\nRemoved %s" % os.path.basename(tsv_path)) # DEBUG
-            except PermissionError:
-                print(colorama.Fore.YELLOW)
-                print("Error removing %s" % os.path.basename(tsv_path) + colorama.Style.RESET_ALL)
-                perm_error = True
-                pass
-            else:
-                perm_error = False
-        return new_filepath, perm_error
-    else:
-        raise Exception("Can't find export %s converted from %s" % (new_filepath, tsv_path))
+    # Confirm output file existence before deleting source file.
+    assert os.path.exists(new_filepath), "Can't find export %s converted from %s" % (new_filepath, tsv_path)
+
+    perm_error = False
+    if replace:
+        try:
+            os.remove(tsv_path) # Delete tsv file
+            # Not working yet in PowerShell intermittently (throws PermissionError)
+            # https://stackoverflow.com/questions/68344233/os-remove-permissionerror-winerror-32-the-process-cannot-access-the-file-be
+            tqdm_obj.write("Removed %s" % os.path.basename(tsv_path)) # DEBUG
+        except PermissionError:
+            print(colorama.Fore.YELLOW)
+            print("Error removing %s" % os.path.basename(tsv_path) + colorama.Style.RESET_ALL)
+            perm_error = True
+
+    return new_filepath, perm_error
 
 
 def convert_all_exports(dir_path, check_xls=True):
     file_list = [x for x in sorted(os.listdir(dir_path)) if x.upper().endswith(".XLS")]
-    for tsv_item in tqdm(file_list, colour="yellow"):
+    pbar = tqdm(file_list, colour="yellow")
+    for tsv_item in pbar:
         tsv_item_path = os.path.join(dir_path, tsv_item)
         if os.path.isdir(tsv_item_path):
             # print("%s not a file." % item)
@@ -98,7 +94,8 @@ def convert_all_exports(dir_path, check_xls=True):
 
         new_xlsx_filename = os.path.splitext(tsv_item_path)[0] + ".xlsx"
         converted_file_path, perm_error = convert_export(tsv_item_path,
-                        new_xlsx_filename, check_for_xls=check_xls, replace=True)
+                                    new_xlsx_filename, check_for_xls=check_xls,
+                                                    replace=True, tqdm_obj=pbar)
         if perm_error:
             raise PermissionError
 

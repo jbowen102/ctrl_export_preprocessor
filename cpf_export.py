@@ -271,8 +271,9 @@ def convert_file(source_file_path, target_dir):
     if file_type.lower() == ".cpf":
         open_cpf(source_file_path)
         export_path = export_cpf(target_dir, export_name)
-        # convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
-        #                                     check_for_xls=False, replace=False)
+        convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
+                                            check_for_xls=False, replace=False)
+        # Converts w/o attempting to delete the old .XLS (actually tsv format) file
         # # Keep getting PermissionError when run in PowerShell w/ replace=True.
 
     elif file_type.lower() == ".cdf":
@@ -415,8 +416,15 @@ def convert_all(file_type, source_dir, dest_dir):
                 convert_file(filepath, dest_dir)
             except Exception as exception_text:
                 print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
-                print("\nEncountered exception processing %s\n" % filename + colorama.Style.RESET_ALL)
-                raise Exception(exception_text)
+                print("\nEncountered exception processing %s" % filename + colorama.Style.RESET_ALL)
+                print(exception_text)
+                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+                print("Proceed to convert tsv-format CPF exports that were processed already? [Y/N]")
+                answer = input("> " + colorama.Style.RESET_ALL)
+                if answer.upper() == "Y":
+                    break
+                else:
+                    raise Exception(exception_text)
             else:
                 tqdm.write("Processed %s" % filename)
         elif file_type.upper() == ".XLS":
@@ -435,12 +443,14 @@ def convert_all(file_type, source_dir, dest_dir):
 
     if file_type == "cpf":
         # Convert CPF exports (.XLS extension but TSV format) to true Excel format.
-        # Gets a PermissionError if running on PowerShell most of the time.
+        # Runs as batch to catch any exports that didn't get converted and to delete
+        # old pre-converted exports lingering in export folder.
         print("\nConverting CPF exports from tsv format (named .XLS) to .xslx...")
         try:
             convert_all_exports(dest_dir, check_xls=False)
             print("...done")
         except PermissionError:
+            # Gets a PermissionError if running on PowerShell most of the time.
             print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
             input("\nEncountered permission error in removing CPF tsv files.\n"
                             "Press Enter to continue to next part of program.")
