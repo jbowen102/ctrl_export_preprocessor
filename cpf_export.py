@@ -118,7 +118,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                         new_names.append(new_filename)
 
     print("Renames:")
-    if len(old_names > 0):
+    if len(old_names) > 0:
         for i, name in enumerate(old_names):
             print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
     else:
