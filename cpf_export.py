@@ -60,6 +60,11 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
+    while not os.path.exists(remote):
+        # Prompt user to mount network drives if not found.
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
+                                'and press Enter to try again.' % src)
+        input("> " + colorama.Style.RESET_ALL)
 
     # Keep track of renames for display later.
     old_names = []
@@ -148,6 +153,10 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
 
 
 def sync_remote(src, dest, purge=False):
+    if not os.path.exists(src):
+        raise Exception("Can't find src dir '%s'" % src)
+    if not os.path.exists(dest):
+        raise Exception("Can't find dest dir '%s'" % dest)
 
     if os.name=="nt" and purge:
         flag = ["/purge"]
@@ -181,29 +190,37 @@ def sync_remote(src, dest, purge=False):
         raise Exception("SYNC to '%s' FAILED" % os.path.basename(dest))
 
 
-def back_up_remote():
+def back_up_remote(src=DIR_REMOTE_SRC, dest_root=DIR_REMOTE_BU):
+    if not os.path.exists(src):
+        raise Exception("Can't find src dir '%s'" % src)
+    if not os.path.exists(dest_root):
+        raise Exception("Can't find dest_root dir '%s'" % dest_root)
+
     # Back up remote source contents before datestamping files on remote.
-    sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_BU, "mirror"), purge=True)
+    sync_remote(src, os.path.join(dest_root, "mirror"), purge=True)
     # Removes any extraneous files from local import folder that don't exist in remote.
 
-    sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_BU, "union"))
+    sync_remote(src, os.path.join(dest_root, "union"))
     # Leaves all in place
 
 
-def remote_updates():
+def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
+    if not os.path.exists(dest):
+        raise Exception("Can't find dest dir '%s'" % dest)
+
     # Pull from remote dir.
-    if os.listdir(DIR_IMPORT):
+    if os.listdir(dest):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
-                            '(overwrites existing local BU)? [Y / N]' % DIR_REMOTE_SRC)
+                            '(overwrites existing local BU)? [Y / N]' % src)
         run_bu = input("> " + colorama.Style.RESET_ALL)
     else:
-        # If DIR_IMPORT empty, don't prompt for sync. Just do it.
+        # If dest empty, don't prompt for sync. Just do it.
         run_bu = "Y"
 
-    while not os.path.exists(DIR_REMOTE_SRC):
+    while not os.path.exists(src):
         # Prompt user to mount network drives if not found.
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
-                                'and press Enter to try again.' % DIR_REMOTE_SRC)
+                                'and press Enter to try again.' % src)
         input("> " + colorama.Style.RESET_ALL)
 
     if run_bu.upper() == "Y":
@@ -214,7 +231,7 @@ def remote_updates():
         print("Skipping remote BU.")
 
     print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
-                    'in remote directory (datestamp) "%s"? [Y / N]' % DIR_REMOTE_SRC)
+                    'in remote directory (datestamp) "%s"? [Y / N]' % src)
     update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
     if update_remote_filenames.upper() == "Y":
         print("Updating remote filenames...")
@@ -242,6 +259,11 @@ def remote_updates():
 
 
 def convert_file(source_file_path, target_dir):
+    if not os.path.exists(source_file_path):
+        raise Exception("Can't find src file '%s'" % source_file_path)
+    if not os.path.exists(target_dir):
+        raise Exception("Can't find target_dir '%s'" % target_dir)
+
     file_type = os.path.splitext(source_file_path)[-1]
     export_name = os.path.basename(source_file_path)
 
@@ -267,6 +289,9 @@ def select_program(filetype):
 
 
 def open_cpf(file_path):
+    if not os.path.exists(file_path):
+        raise Exception("Can't file_path '%s'" % file_path)
+
     # Assumes 1314 program already in focus.
     # Get to import folder
     gui.hotkey("ctrl", "o")
@@ -283,6 +308,9 @@ def open_cpf(file_path):
 
 
 def export_cpf(target_dir, filename_orig):
+    if not os.path.exists(target_dir):
+        raise Exception("Can't target_dir '%s'" % target_dir)
+
     xls_filename = os.path.splitext(filename_orig)[0] + CPF_EXPORT_SUFFIX_TSV
 
     # Assumes 1314 program already in focus.
@@ -307,6 +335,9 @@ def export_cpf(target_dir, filename_orig):
 
 
 def open_cdf(file_path):
+    if not os.path.exists(file_path):
+        raise Exception("Can't file_path '%s'" % file_path)
+
     # Ensure file is nonzero size. CIT gives error window for empty file.
     if not os.path.getsize(file_path):
         print("\tSkipping %s (empty file)." % os.path.basename(file_path))
@@ -327,6 +358,9 @@ def open_cdf(file_path):
 
 
 def export_cdf(target_dir, filename_orig):
+    if not os.path.exists(target_dir):
+        raise Exception("Can't target_dir '%s'" % target_dir)
+
     xlsx_filename = os.path.splitext(filename_orig)[0] + CDF_EXPORT_SUFFIX
     # Assumes CIT project open and Programmer window open, in focus.
     gui.press(["alt", "f", "e", "s"]) # Export spreadsheet
@@ -348,6 +382,11 @@ def export_cdf(target_dir, filename_orig):
 
 
 def convert_all(file_type, source_dir, dest_dir):
+    if not os.path.exists(source_dir):
+        raise Exception("Can't find source_dir '%s'" % source_dir)
+    if not os.path.exists(dest_dir):
+        raise Exception("Can't find dest_dir '%s'" % dest_dir)
+
     select_program(file_type)
     for filename in tqdm(sorted(os.listdir(source_dir)), colour="cyan"):
         # Check for existing export
