@@ -153,31 +153,33 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
     print(colorama.Style.RESET_ALL)
 
 
-def sync_remote(src, dest, purge=False):
+def sync_remote(src, dest, purge=False, multilevel=True):
     if not os.path.exists(src):
         raise Exception("Can't find src dir '%s'" % src)
     if not os.path.exists(dest):
         raise Exception("Can't find dest dir '%s'" % dest)
 
-    if os.name=="nt" and purge:
-        flag = ["/purge"]
-    elif os.name=="posix" and purge:
-        flag = ["--delete-before"]
-    elif purge:
-        raise Exception("Unrecognized OS type: %s" % os.name)
-    else:
-        flag = []
+    flags = []
+    if multilevel and os.name=="nt":
+        flags.append("/s")
+    elif not multilevel and os.name=="posix":
+        flags.extend(["-f", "- /*/"])
+        # https://superuser.com/questions/436070/rsync-copying-directory-contents-non-recursively
+
+    if purge and os.name=="nt":
+        flags.append("/purge")
+    elif purge and os.name=="posix":
+        flags.append("--delete-before")
 
     if os.name=="nt":
         print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
-        returncode = subprocess.call(["robocopy", src, dest, "/s", "/compress"] + flag)
-                                        # "*.cpf", "/s", "/purge", "/compress"])
+        returncode = subprocess.call(["robocopy", src, dest, "/compress"] + flags)
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
 
     elif os.name=="posix":
         print("Attempting to run rsync..." + colorama.Fore.YELLOW)
-        CompProc = subprocess.run(["rsync", "-azivh"] + flag + ["%s/" % src,
+        CompProc = subprocess.run(["rsync", "-azivh"] + flags + ["%s/" % src,
                                         "%s/" % dest], stderr=subprocess.STDOUT)
 
     print(colorama.Style.RESET_ALL)
@@ -519,5 +521,5 @@ if __name__ == "__main__":
         print(colorama.Style.RESET_ALL)
 
     print("Syncing processed files to shared folder...")
-    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True)
+    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True, multilevel=False)
     print("...done")
