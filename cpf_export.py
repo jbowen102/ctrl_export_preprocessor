@@ -15,7 +15,7 @@ if os.name == "nt":
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
-from fix_cpf_export_format import convert_export, convert_all_exports
+import fix_cpf_export_format as fixcpf
 from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
@@ -218,12 +218,6 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         # If dest empty, don't prompt for sync. Just do it.
         run_bu = "Y"
 
-    while not os.path.exists(src):
-        # Prompt user to mount network drives if not found.
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
-                                'and press Enter to try again.' % src)
-        input("> " + colorama.Style.RESET_ALL)
-
     if run_bu.upper() == "Y":
         print("Backing up ...")
         back_up_remote()
@@ -271,8 +265,7 @@ def convert_file(source_file_path, target_dir):
     if file_type.lower() == ".cpf":
         open_cpf(source_file_path)
         export_path = export_cpf(target_dir, export_name)
-        convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
-                                            check_for_xls=False, replace=False)
+        fixcpf.convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
         # Converts w/o attempting to delete the old .XLS (actually tsv format) file
         # # Keep getting PermissionError when run in PowerShell w/ replace=True.
 
@@ -430,7 +423,7 @@ def convert_all(file_type, source_dir, dest_dir):
         elif file_type.upper() == ".XLS":
             # Unconverted CPF export in import folder.
             try:
-                convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx", replace=False)
+                fixcpf.convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx", replace=False)
                 # Keep getting PermissionError when run in PowerShell w/ replace=True.
             except AttributeError and os.name == "nt":
                 print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
@@ -442,19 +435,29 @@ def convert_all(file_type, source_dir, dest_dir):
             continue
 
     if file_type == "cpf":
-        # Convert CPF exports (.XLS extension but TSV format) to true Excel format.
-        # Runs as batch to catch any exports that didn't get converted and to delete
+        # catch any exports that didn't get converted and to delete
         # old pre-converted exports lingering in export folder.
-        print("\nConverting CPF exports from tsv format (named .XLS) to .xslx...")
-        try:
-            convert_all_exports(dest_dir, check_xls=False)
-            print("...done")
-        except PermissionError:
-            # Gets a PermissionError if running on PowerShell most of the time.
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            input("\nEncountered permission error in removing CPF tsv files.\n"
-                            "Press Enter to continue to next part of program.")
-            print(colorama.Style.RESET_ALL)
+        convert_cpfs_in_export(dest_dir)
+
+
+def convert_cpfs_in_export(dir_path):
+    """Convert CPF exports (.XLS extension but TSV format) to true Excel format.
+    Run as batch to catch any exports that didn't get converted and to delete
+    old pre-converted exports lingering in export folder."""
+    if not os.path.exists(dir_path):
+        raise Exception("Can't find dir_path '%s'" % dir_path)
+
+    print("\nConverting CPF exports from tsv format (named .XLS) to .xslx (in dir "
+                                                    "\n\t\"%s\")..." % dir_path)
+    try:
+        fixcpf.convert_all_exports(dir_path, check_xls=False)
+        print("...done")
+    except PermissionError:
+        # Gets a PermissionError if running on PowerShell most of the time.
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        input("\nEncountered permission error in removing CPF tsv files.\n"
+                        "Press Enter to continue to next part of program.")
+        print(colorama.Style.RESET_ALL)
 
 
 def create_file_struct():
