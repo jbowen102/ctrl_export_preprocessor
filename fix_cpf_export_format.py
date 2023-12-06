@@ -187,6 +187,33 @@ def convert_and_aggregate_exports(dir_path):
         print("...done")
 
 
+def parse_cpf_vehicle_sn(cpf_param_filepath):
+    tsv_reader = csv.reader(open(cpf_param_filepath, 'r'), delimiter='\t')
+
+    found_sn_field = False
+    for row, data_list in enumerate(tsv_reader):
+
+        # Check for 1206AC CPF
+        if data_list and data_list[0].startswith("1206AC"):
+            # No vehicle S/N stored?
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            input("%s is a 1206AC export. Press Enter to continue. " % cpf_param_filepath + colorama.RESET_ALL)
+
+        if len(data_list) >= 2:
+            field_label = data_list[1]
+            field_value = data_list[2]
+            if field_label == "Vehicle Serial Number":
+                found_sn_field = True
+                if not field_value:
+                    return None
+                # elif field_value == "4294967295":
+                #     return None
+                else:
+                    return field_value # string
+
+    if not found_sn_field:
+        print("\nCan't find S/N field in %s" % os.path.basename(cpf_param_filepath))
+
 
 if __name__ == "__main__":
     # Don't run if module being imported. Only if script being run directly.

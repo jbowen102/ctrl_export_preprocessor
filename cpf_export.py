@@ -26,9 +26,16 @@ from dir_names import DIR_REMOTE_SRC, \
 
 
 DATE_FORMAT = "%Y%m%d"
+SN_REGEX = r"(3\d{6}|5\d{6}|8\d{6})"
+# Any "3" or "5" or "8" followed by six more digits
+DATE_REGEX = r"(20\d{2}[0-1]\d[0-3]\d)"
+# Any "20" followed by two digits,
+    # followed by either "0" or "1" and any digit (months)
+        # followed by either "0", "1", "2", or "3" paired with any digit (days 01-31)
+# Could catch some invalid dates like 20231131. Further validated below in find_in_string()
+
 
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
-
 CPF_PARAM_EXPORT_SUFFIX = "_cpf-params.tsv"
 CPF_FAULT_EXPORT_SUFFIX = "_cpf-faults.tsv"
 CPF_COMBINED_EXPORT_SUFFIX = "_cpf.xlsx"
@@ -66,8 +73,8 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
             return None
 
         # No matches, or invalid date found:
-        print(prompt)
-        string_to_search = input("> ")
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
+        string_to_search = input("> " + colorama.RESET_ALL)
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
@@ -93,33 +100,20 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
 
                 if ext.lower() in (".cpf", ".cdf"):
                     # Find S/N in filename
-                    sn_regex = r"(3\d{6}|5\d{6}|8\d{6})"
-                    # Any "3" or "5" or "8" followed by six more digits
-                    prompt_str = 'Can\'t parse S/N from import filename "%s". ' \
-                                                    'Type S/N manually:' % file_name
+                    prompt_str = "Can't parse S/N from import filename \"%s\".\n" \
+                                                    "Type S/N manually: " % file_name
                     # print("\n\tS/N:") # DEBUG
-                    serial_num = find_in_string(sn_regex, item_name, prompt_str)
+                    serial_num = find_in_string(SN_REGEX, item_name, prompt_str)
                     # Now look for date in remaining string. Will add later if not present.
                     # print("\tReceived %s as S/N back from find_in_string()" % serial_num) # DEBUG
                     remaining_str = item_name.split(serial_num)
                     date_found = False
                     for substring in remaining_str:
-                        # date_regex = r"(20\d{2}(0\d|1[0-2])([0-2]\d|3[0-1]))" # didn't work
-                        # Any "20" followed by two digits,
-                            # followed by either "0" and a digit or "10", "11", or "12" (months)
-                                # followed by either "0", "1", or "2" paired with a digit (days 01-29)
-                                # or "30" or "31"
-                        date_regex = r"(20\d{2}[0-1]\d[0-3]\d)"
-                        # Any "20" followed by two digits,
-                            # followed by either "0" or "1" and any digit (months)
-                                # followed by either "0", "1", "2", or "3" paired with any digit (days 01-31)
-                        # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
-
-                        prompt_str = 'Can\'t find single valid date match in import ' \
-                                        'filename "%s". Type manually (YYYYMMDD ' \
-                                                            'format):' % file_name
+                        prompt_str = "Can't find single valid date match in import " \
+                                                            "filename \"%s\".\n" \
+                                "Type manually (YYYYMMDD format): " % file_name
                         # print("\tDate:") # DEBUG
-                        date_match = find_in_string(date_regex, substring,
+                        date_match = find_in_string(DATE_REGEX, substring,
                                     prompt_str, date_target=True, allow_none=True)
                         # print("\tReceived %s as date back from find_in_string()" % date_match) # DEBUG
 
@@ -365,7 +359,33 @@ def export_cpf_params(target_dir, output_filename):
     # Check if new file exists in exported location as expected after conversion.
     export_path = os.path.join(target_dir, output_filename)
     assert os.path.exists(export_path), "Can't confirm output file existence."
+
+    match = check_cpf_vehicle_sn(export_path)
+
     return export_path
+
+
+def check_cpf_vehicle_sn(cpf_param_path):
+    cpf_param_filename = os.path.basename(cpf_param_path)
+
+    vehicle_sn_stored = fixcpf.parse_cpf_vehicle_sn(cpf_param_path)
+    prompt_str = "Can\'t parse S/N from cpf_param_filename \"%s\".\n" \
+                                                "Type S/N manually: " % cpf_param_filename
+    vehicle_sn_from_filename = find_in_string(SN_REGEX, cpf_param_filename, prompt_str)
+    # print("%s\tfrom filename." % vehicle_sn_from_filename) # DEBUG
+    # print("%s\tstored in CPF." % vehicle_sn_stored) # DEBUG
+
+    if vehicle_sn_stored is None:
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        input("No S/N found in \"%s\". Press Enter to continue. " % cpf_param_filename + colorama.RESET_ALL)
+        return False
+    elif vehicle_sn_stored != vehicle_sn_from_filename:
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        input("S/N mismatch: %s in \"%s\". Press Enter to continue. "
+                % (vehicle_sn_stored, cpf_param_filename) + colorama.RESET_ALL)
+        return False
+    else:
+        return True
 
 
 def export_cpf_faults(target_dir, output_filename):
