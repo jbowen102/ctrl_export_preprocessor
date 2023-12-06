@@ -14,7 +14,7 @@ def wait_for_input():
     input("\nEnd of Script. Press Enter to finish and close.")
 
 
-def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True, tqdm_obj=None):
+def convert_param_export(tsv_path, new_filename, check_for_xls=True, replace=True, tqdm_obj=None):
     if not os.path.exists(tsv_path):
         print('Can\'t find source file "%s".' % os.path.basename(tsv_path))
         return
@@ -72,7 +72,11 @@ def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True, tqd
             os.remove(tsv_path) # Delete tsv file
             # Not working yet in PowerShell intermittently (throws PermissionError)
             # https://stackoverflow.com/questions/68344233/os-remove-permissionerror-winerror-32-the-process-cannot-access-the-file-be
-            tqdm_obj.write("Removed %s" % os.path.basename(tsv_path)) # DEBUG
+            output_str = "Removed %s" % os.path.basename(tsv_path)
+            if tqdm_obj is None:
+                print(output_str) # DEBUG
+            else:
+                tqdm_obj.write(output_str) # DEBUG
         except PermissionError:
             print(colorama.Fore.YELLOW)
             print("Error removing %s" % os.path.basename(tsv_path) + colorama.Style.RESET_ALL)
@@ -81,7 +85,36 @@ def convert_export(tsv_path, new_filename, check_for_xls=True, replace=True, tqd
     return new_filepath, perm_error
 
 
-def convert_all_exports(dir_path, check_xls=True):
+def combine_param_and_fault_export(cpf_params_path, cpf_faults_path, combined_file_path):
+    if not os.path.exists(cpf_params_path):
+        raise Exception("Can't find cpf_params file '%s'" % cpf_params_path)
+    if cpf_faults_path is not None and not os.path.exists(cpf_faults_path):
+        raise Exception("Can't find cpf_faults file '%s'" % cpf_faults_path)
+
+    if os.path.exists(combined_file_path):
+        raise Exception("Combined export '%s' exists already" % os.path.basename(combined_file_path))
+
+    # Create new combined file
+    with Workbook(combined_file_path) as workbook:
+
+        worksheet = workbook.add_worksheet("Parameters")
+        tsv_reader1 = csv.reader(open(cpf_params_path, 'r'), delimiter='\t')
+        for row, data in enumerate(tsv_reader1):
+            worksheet.write_row(row, 0, data)
+        # Borrowed from here
+        # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
+
+        worksheet = workbook.add_worksheet("Faults") # Will be blank if CPF had no faults.
+        if cpf_faults_path is not None:
+            # Could be no faults present in CPF.
+            tsv_reader2 = csv.reader(open(cpf_faults_path, 'r'), delimiter='\t')
+            for row, data in enumerate(tsv_reader2):
+                worksheet.write_row(row, 0, data)
+
+    # print("Successfully wrote %s" % os.path.basename(combined_file_path)) # DEBUG
+
+
+def convert_all_param_exports(dir_path, check_xls=True):
     file_list = [x for x in sorted(os.listdir(dir_path)) if x.upper().endswith(".XLS")]
     pbar = tqdm(file_list, colour="yellow")
     for tsv_item in pbar:
@@ -93,7 +126,7 @@ def convert_all_exports(dir_path, check_xls=True):
             continue
 
         new_xlsx_filename = os.path.splitext(tsv_item_path)[0] + ".xlsx"
-        converted_file_path, perm_error = convert_export(tsv_item_path,
+        converted_file_path, perm_error = convert_param_export(tsv_item_path,
                                     new_xlsx_filename, check_for_xls=check_xls,
                                                     replace=True, tqdm_obj=pbar)
         if perm_error:

@@ -6,6 +6,7 @@ import shutil
 
 from tqdm import tqdm
 import colorama
+from xlsxwriter.workbook import Workbook
 if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
@@ -19,15 +20,20 @@ import fix_cpf_export_format as fixcpf
 from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
-                        DIR_EXPORT, \
-                      DIR_REMOTE_SHARE
+                        DIR_EXPORT, DIR_EXPORT_BUFFER, \
+                      DIR_REMOTE_SHARE, \
+                      ERROR_HISTORY_SAVE_IMG
 
 
 DATE_FORMAT = "%Y%m%d"
 
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
-CPF_EXPORT_SUFFIX_TSV = "_cpf.XLS"
-CPF_EXPORT_SUFFIX = "_cpf.xlsx"
+
+CPF_PARAM_EXPORT_SUFFIX = "_cpf-params.tsv"
+CPF_FAULT_EXPORT_SUFFIX = "_cpf-faults.tsv"
+CPF_COMBINED_EXPORT_SUFFIX = "_cpf.xlsx"
+
+ERROR_HISTORY_SAVE_BUTTON_LOC = None # Will be modified below
 
 
 def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, allow_none=False):
@@ -255,25 +261,46 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         print("Skipping import-dir update from remote.\n")
 
 
-def convert_file(source_file_path, target_dir):
-    if not os.path.exists(source_file_path):
-        raise Exception("Can't find src file '%s'" % source_file_path)
+def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER):
+    if not os.path.exists(cxf_path):
+        raise Exception("Can't find src file '%s'" % cxf_path)
     if not os.path.exists(target_dir):
         raise Exception("Can't find target_dir '%s'" % target_dir)
 
-    file_type = os.path.splitext(source_file_path)[-1]
-    export_name = os.path.basename(source_file_path)
+    file_type = os.path.splitext(cxf_path)[-1]
+    cxf_name = os.path.basename(cxf_path)
 
     if file_type.lower() == ".cpf":
-        open_cpf(source_file_path)
-        export_path = export_cpf(target_dir, export_name)
-        fixcpf.convert_export(export_path, os.path.splitext(os.path.basename(export_path))[0] + ".xlsx",
-        # Converts w/o attempting to delete the old .XLS (actually tsv format) file
-        # # Keep getting PermissionError when run in PowerShell w/ replace=True.
+        cpf_open = False
+        # Open CPF in GUI and export parameters if export doesn't exist already.
+        cpf_param_export_filename = os.path.splitext(cxf_name)[0] + CPF_PARAM_EXPORT_SUFFIX
+        if not os.path.exists(os.path.join(temp_dir, cpf_param_export_filename)):
+            cpf_open = open_cpf(cxf_path)
+            cpf_params_path = export_cpf_params(temp_dir, cpf_param_export_filename)
+        else:
+            cpf_params_path = os.path.join(temp_dir, cpf_param_export_filename)
+
+        # Open CPF in GUI and export faults if export doesn't exist already.
+        cpf_fault_export_filename = os.path.splitext(cxf_name)[0] + CPF_FAULT_EXPORT_SUFFIX
+        if not os.path.exists(os.path.join(temp_dir, cpf_fault_export_filename)):
+            if not cpf_open:
+                cpf_open = open_cpf(cxf_path)
+
+            # Export faults
+            cpf_faults_path = export_cpf_faults(temp_dir, cpf_fault_export_filename)
+        else:
+            cpf_faults_path = os.path.join(temp_dir, cpf_fault_export_filename)
+
+        # Combine both tsvs to single export file.
+        cpf_combined_export_filename = os.path.splitext(cxf_name)[0] + CPF_COMBINED_EXPORT_SUFFIX
+        cpf_combined_export_path = os.path.join(target_dir, cpf_combined_export_filename)
+        fixcpf.combine_param_and_fault_export(cpf_params_path, cpf_faults_path, cpf_combined_export_path)
 
     elif file_type.lower() == ".cdf":
-        open_cdf(source_file_path)
-        export_path = export_cdf(target_dir, export_name)
+        open_cdf(cxf_path)
+
+        cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
+        export_path = export_cdf(target_dir, cdf_export_filename)
 
 
 def select_program(filetype):
@@ -290,7 +317,7 @@ def select_program(filetype):
 
 def open_cpf(file_path):
     if not os.path.exists(file_path):
-        raise Exception("Can't file_path '%s'" % file_path)
+        raise Exception("Can't find file_path '%s'" % file_path)
 
     # Assumes 1314 program already in focus.
     # Get to import folder
@@ -306,19 +333,19 @@ def open_cpf(file_path):
     gui.press(["enter"]) # Confirm filename to open.
     time.sleep(1) # Allow time for to open.
 
+    return True
 
-def export_cpf(target_dir, filename_orig):
+
+def export_cpf_params(target_dir, output_filename):
     if not os.path.exists(target_dir):
-        raise Exception("Can't target_dir '%s'" % target_dir)
-
-    xls_filename = os.path.splitext(filename_orig)[0] + CPF_EXPORT_SUFFIX_TSV
+        raise Exception("Can't find target_dir '%s'" % target_dir)
 
     # Assumes 1314 program already in focus.
     gui.hotkey("alt", "f") # Open File menu (toolbar).
     gui.press(["e"]) # Select Export from File menu.
 
     gui.hotkey("alt", "n") # Select filename field
-    gui.typewrite(xls_filename)
+    gui.typewrite(output_filename)
 
     gui.hotkey("ctrl", "l") # Select address bar
     gui.typewrite(target_dir) # Navigate to target export folder.
@@ -326,17 +353,61 @@ def export_cpf(target_dir, filename_orig):
     gui.hotkey("alt", "s") # Save
     time.sleep(0.2)
 
+    # Check if new file exists in exported location as expected after conversion.
+    export_path = os.path.join(target_dir, output_filename)
+    assert os.path.exists(export_path), "Can't confirm output file existence."
+    return export_path
+
+
+def export_cpf_faults(target_dir, output_filename):
+    global ERROR_HISTORY_SAVE_BUTTON_LOC # Allow modification of global variable
+
+    if not os.path.exists(target_dir):
+        raise Exception("Can't find target_dir '%s'" % target_dir)
+
+    # Assumes 1314 program already in focus.
+
+    gui.hotkey("ctrl", "4") # Diagnostics tab
+
+    # Click on Save button inside Error History tab (different than Ctrl+S save)
+    # Use previously-found button if coordinates stored already.
+    if ERROR_HISTORY_SAVE_BUTTON_LOC is None:
+        loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
+        if loc_tuple is None:
+            pass
+            # raise Exception("Can't find Error History save button.")
+        ERROR_HISTORY_SAVE_BUTTON_LOC = loc_tuple # Update global variable.
+    else:
+        loc_tuple = ERROR_HISTORY_SAVE_BUTTON_LOC
+    # loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
+    # if loc_tuple is None:
+    #     # If no faults present in CPF, Save button will be absent.
+    #     print("\nNo faults present in %s" % output_filename)
+    #     return None
+    # # Need to improve robustness of button ID. Above false-trips when Save button actually present
+
+    x, y = loc_tuple
+    gui.click(x, y)
+
+    gui.hotkey("alt", "n") # Select filename field
+    gui.typewrite(output_filename)
+
+    gui.hotkey("ctrl", "l") # Select address bar
+    gui.typewrite(target_dir) # Navigate to target export folder.
+    gui.press(["enter"])
+    gui.hotkey("alt", "s") # Save
+    time.sleep(0.2)
     gui.hotkey("ctrl", "f4") # Close CPF file.
 
     # Check if new file exists in exported location as expected after conversion.
-    export_path = os.path.join(target_dir, xls_filename)
+    export_path = os.path.join(target_dir, output_filename)
     assert os.path.exists(export_path), "Can't confirm output file existence."
     return export_path
 
 
 def open_cdf(file_path):
     if not os.path.exists(file_path):
-        raise Exception("Can't file_path '%s'" % file_path)
+        raise Exception("Can't find file_path '%s'" % file_path)
 
     # Ensure file is nonzero size. CIT gives error window for empty file.
     if not os.path.getsize(file_path):
@@ -357,16 +428,15 @@ def open_cdf(file_path):
     time.sleep(1) # Allow time for file to open.
 
 
-def export_cdf(target_dir, filename_orig):
+def export_cdf(target_dir, output_filename):
     if not os.path.exists(target_dir):
-        raise Exception("Can't target_dir '%s'" % target_dir)
+        raise Exception("Can't find target_dir '%s'" % target_dir)
 
-    xlsx_filename = os.path.splitext(filename_orig)[0] + CDF_EXPORT_SUFFIX
     # Assumes CIT project open and Programmer window open, in focus.
     gui.press(["alt", "f", "e", "s"]) # Export spreadsheet
 
     gui.hotkey("alt", "n") # Select filename field
-    gui.typewrite(xlsx_filename)
+    gui.typewrite(output_filename)
 
     gui.hotkey("ctrl", "l") # Select address bar
     gui.typewrite(target_dir) # Navigate to target export folder.
@@ -378,7 +448,7 @@ def export_cdf(target_dir, filename_orig):
 
     # Opens .xlsx file at end. Not sure how to suppress.
 
-    return os.path.join(target_dir, xlsx_filename)
+    return os.path.join(target_dir, output_filename)
 
 
 def convert_all(file_type, source_dir, dest_dir):
@@ -392,9 +462,7 @@ def convert_all(file_type, source_dir, dest_dir):
     for filename in tqdm(file_list, colour="cyan"):
         # Check for existing export
         if file_type == "cpf" and (os.path.exists(os.path.join(DIR_EXPORT,
-                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX_TSV))
-            or os.path.exists(os.path.join(DIR_EXPORT,
-                            os.path.splitext(filename)[0] + CPF_EXPORT_SUFFIX))):
+                            os.path.splitext(filename)[0] + CPF_COMBINED_EXPORT_SUFFIX))):
             # Skip if already processed this file.
             tqdm.write("Already processed %s" % os.path.basename(filename)) # DEBUG
             continue
@@ -422,24 +490,10 @@ def convert_all(file_type, source_dir, dest_dir):
                     raise Exception(exception_text)
             else:
                 tqdm.write("Processed %s" % filename)
-        elif file_type.upper() == ".XLS":
-            # Unconverted CPF export in import folder.
-            try:
-                fixcpf.convert_export(filepath, os.path.splitext(filename)[0] + ".xlsx", replace=False)
-                # Keep getting PermissionError when run in PowerShell w/ replace=True.
-            except AttributeError and os.name == "nt":
-                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-                print("Found %s in import folder. Process in WSL to employ magic module." % filename)
-                input("Press Enter to continue." + colorama.Style.RESET_ALL)
-                continue
+
         else:
             # Skip directories
             continue
-
-    if file_type == "cpf":
-        # catch any exports that didn't get converted and to delete
-        # old pre-converted exports lingering in export folder.
-        convert_cpfs_in_export(dest_dir)
 
 
 def convert_cpfs_in_export(dir_path):
@@ -452,7 +506,7 @@ def convert_cpfs_in_export(dir_path):
     print("\nConverting CPF exports from tsv format (named .XLS) to .xslx (in dir "
                                                     "\n\t\"%s\")..." % dir_path)
     try:
-        fixcpf.convert_all_exports(dir_path, check_xls=False)
+        fixcpf.convert_all_param_exports(dir_path, check_xls=False)
         print("...done")
     except PermissionError:
         # Gets a PermissionError if running on PowerShell most of the time.
