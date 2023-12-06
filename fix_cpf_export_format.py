@@ -98,18 +98,21 @@ def combine_param_and_fault_export(cpf_params_path, cpf_faults_path, combined_fi
     with Workbook(combined_file_path) as workbook:
 
         worksheet = workbook.add_worksheet("Parameters")
-        tsv_reader1 = csv.reader(open(cpf_params_path, 'r'), delimiter='\t')
-        for row, data in enumerate(tsv_reader1):
+        params_iter = csv.reader(open(cpf_params_path, 'r'), delimiter='\t')
+        for row, data in enumerate(params_iter):
             worksheet.write_row(row, 0, data)
         # Borrowed from here
         # https://stackoverflow.com/questions/16852655/convert-a-tsv-file-to-xls-xlsx-using-python
 
         worksheet = workbook.add_worksheet("Faults") # Will be blank if CPF had no faults.
-        if cpf_faults_path is not None:
-            # Could be no faults present in CPF.
-            tsv_reader2 = csv.reader(open(cpf_faults_path, 'r'), delimiter='\t')
-            for row, data in enumerate(tsv_reader2):
-                worksheet.write_row(row, 0, data)
+        if cpf_faults_path is None:
+            # If no faults present in CPF, populate Faults tab w/ header row only.
+            faults_log_iter = [["Error Text", "Error Description"]]
+        else:
+            faults_log_iter = csv.reader(open(cpf_faults_path, 'r'), delimiter='\t')
+
+        for row, data in enumerate(faults_log_iter):
+            worksheet.write_row(row, 0, data)
 
     # print("Successfully wrote %s" % os.path.basename(combined_file_path)) # DEBUG
 

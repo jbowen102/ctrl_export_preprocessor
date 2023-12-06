@@ -22,7 +22,7 @@ from dir_names import DIR_REMOTE_SRC, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
                         DIR_EXPORT, DIR_EXPORT_BUFFER, \
                       DIR_REMOTE_SHARE, \
-                      ERROR_HISTORY_SAVE_IMG
+                      ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
 DATE_FORMAT = "%Y%m%d"
@@ -265,7 +265,7 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         print("Skipping import-dir update from remote.\n")
 
 
-def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER):
+def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=True):
     if not os.path.exists(cxf_path):
         raise Exception("Can't find src file '%s'" % cxf_path)
     if not os.path.exists(target_dir):
@@ -273,6 +273,9 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER):
 
     file_type = os.path.splitext(cxf_path)[-1]
     cxf_name = os.path.basename(cxf_path)
+
+    if not gui_in_focus:
+        select_program(os.path.splitext(cxf_path)[-1][1:])
 
     if file_type.lower() == ".cpf":
         cpf_open = False
@@ -292,7 +295,9 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER):
 
             # Export faults
             cpf_faults_path = export_cpf_faults(temp_dir, cpf_fault_export_filename)
+
         else:
+            # If it already exists in temp dir from previous processing.
             cpf_faults_path = os.path.join(temp_dir, cpf_fault_export_filename)
 
         # Combine both tsvs to single export file.
@@ -374,21 +379,29 @@ def export_cpf_faults(target_dir, output_filename):
     gui.hotkey("ctrl", "4") # Diagnostics tab
 
     # Click on Save button inside Error History tab (different than Ctrl+S save)
-    # Use previously-found button if coordinates stored already.
+    # Mouse hovering over Save icon from previous export changes button appearance.
     if ERROR_HISTORY_SAVE_BUTTON_LOC is None:
         loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
         if loc_tuple is None:
-            pass
-            # raise Exception("Can't find Error History save button.")
-        ERROR_HISTORY_SAVE_BUTTON_LOC = loc_tuple # Update global variable.
+            raise Exception("Can't find Error History save button.")
+        else:
+            ERROR_HISTORY_SAVE_BUTTON_LOC = loc_tuple # Update global variable.
     else:
+        # Use previously-found button if coordinates stored already.
         loc_tuple = ERROR_HISTORY_SAVE_BUTTON_LOC
+
+    # If no faults present in CPF, Save button will be absent. Will fail to export cpf-faults file.
+
     # loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
     # if loc_tuple is None:
     #     # If no faults present in CPF, Save button will be absent.
-    #     print("\nNo faults present in %s" % output_filename)
-    #     return None
-    # # Need to improve robustness of button ID. Above false-trips when Save button actually present
+    #     # Look for greyed-out Save icon.
+    #     loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_BLANK)
+    #     if loc_tuple is None:
+    #         raise Exception("Can't find Error History save button.")
+    #     else:
+    #         print("\nNo faults present in %s" % output_filename)
+    #         return None
 
     x, y = loc_tuple
     gui.click(x, y)
@@ -401,11 +414,21 @@ def export_cpf_faults(target_dir, output_filename):
     gui.press(["enter"])
     gui.hotkey("alt", "s") # Save
     time.sleep(0.2)
-    gui.hotkey("ctrl", "f4") # Close CPF file.
 
     # Check if new file exists in exported location as expected after conversion.
     export_path = os.path.join(target_dir, output_filename)
-    assert os.path.exists(export_path), "Can't confirm output file existence."
+    if not os.path.exists(export_path):
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nCan't confirm output file existence (\"%s\"). Empty fault history? [Y/N]" % output_filename)
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer.upper() == "Y":
+            select_program("cpf")
+            export_path = None
+        else:
+            # Accept anything other than a blank input or 'Y' as a No.
+            raise Exception("Can't find cpf_faults file '%s'" % cxf_name)
+
+    gui.hotkey("ctrl", "f4") # Close CPF file.
     return export_path
 
 
@@ -413,6 +436,7 @@ def open_cdf(file_path):
     if not os.path.exists(file_path):
         raise Exception("Can't find file_path '%s'" % file_path)
 
+    # Assumes CIT program already in focus.
     # Ensure file is nonzero size. CIT gives error window for empty file.
     if not os.path.getsize(file_path):
         print("\tSkipping %s (empty file)." % os.path.basename(file_path))
