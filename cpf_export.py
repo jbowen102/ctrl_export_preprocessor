@@ -36,6 +36,10 @@ CPF_COMBINED_EXPORT_SUFFIX = "_cpf.xlsx"
 ERROR_HISTORY_SAVE_BUTTON_LOC = None # Will be modified below
 
 
+class UserCancel(Exception):
+    pass
+
+
 def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, allow_none=False):
     found = None # Initialize variable for loop
     while not found:
@@ -312,7 +316,7 @@ def select_program(filetype):
                                         "screen to abort." % filetype.upper())
         print(colorama.Style.RESET_ALL)
     else:
-        raise Exception("User canceled.")
+        raise UserCancel()
 
 
 def open_cpf(file_path):
@@ -457,7 +461,11 @@ def convert_all(file_type, source_dir, dest_dir):
     if not os.path.exists(dest_dir):
         raise Exception("Can't find dest_dir '%s'" % dest_dir)
 
-    select_program(file_type)
+    try:
+        select_program(file_type)
+    except UserCancel:
+        return
+
     file_list = [x for x in sorted(os.listdir(source_dir)) if x.lower().endswith(file_type)]
     for filename in tqdm(file_list, colour="cyan"):
         # Check for existing export
@@ -482,12 +490,17 @@ def convert_all(file_type, source_dir, dest_dir):
                 print("\nEncountered exception processing %s" % filename + colorama.Style.RESET_ALL)
                 print(exception_text)
                 print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-                print("Proceed to convert tsv-format CPF exports that were processed already? [Y/N]")
+                print("Press Enter to continue with other files, 'e' to exit "
+                                "file-conversion loop, or 'q' to quit program.")
                 answer = input("> " + colorama.Style.RESET_ALL)
-                if answer.upper() == "Y":
+                if answer.lower() == "":
+                    select_program("cpf")
+                    continue
+                elif answer.lower() == "e":
                     break
                 else:
-                    raise Exception(exception_text)
+                    # Accept anything other than a blank input or 'e' as a quit command.
+                    quit()
             else:
                 tqdm.write("Processed %s" % filename)
 
