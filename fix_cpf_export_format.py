@@ -196,8 +196,10 @@ def parse_cpf_vehicle_sn(cpf_param_filepath):
         # Check for 1206AC CPF
         if data_list and data_list[0].startswith("1206AC"):
             # No vehicle S/N stored?
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            input("%s is a 1206AC export. Press Enter to continue. " % cpf_param_filepath + colorama.RESET_ALL)
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("%s is a 1206AC export. Press Enter to continue." %
+                os.path.basename(cpf_param_filepath) + colorama.Style.RESET_ALL)
+            return None
 
         if len(data_list) >= 2:
             field_label = data_list[1]
@@ -212,7 +214,10 @@ def parse_cpf_vehicle_sn(cpf_param_filepath):
                     return field_value # string
 
     if not found_sn_field:
-        print("\nCan't find S/N field in %s" % os.path.basename(cpf_param_filepath))
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("Can't find S/N field in %s. Press Enter to continue."
+                % os.path.basename(cpf_param_filepath) + colorama.Style.RESET_ALL)
+        return None
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
 
         # No matches, or invalid date found:
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
-        string_to_search = input("> " + colorama.RESET_ALL)
+        string_to_search = input("> " + colorama.Style.RESET_ALL)
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
@@ -318,10 +318,9 @@ def select_program(filetype):
     # Brings conversion program into focus.
     answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK is off, then click OK." % filetype.upper())
     if answer == "OK":
-        print(colorama.Fore.RED + colorama.Style.BRIGHT + "\nGUI interaction "
-                        "commencing (%s). Move mouse pointer to upper left of "
-                                        "screen to abort." % filetype.upper())
-        print(colorama.Style.RESET_ALL)
+        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
+                    "commencing (%s). Move mouse pointer to upper left of "
+                    "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
     else:
         raise UserCancel()
 
@@ -369,6 +368,8 @@ def export_cpf_params(target_dir, output_filename):
     assert os.path.exists(export_path), "Can't confirm output file existence."
 
     match = check_cpf_vehicle_sn(export_path)
+    if not match:
+        select_program("cpf")
 
     return export_path
 
@@ -384,13 +385,13 @@ def check_cpf_vehicle_sn(cpf_param_path):
     # print("%s\tstored in CPF." % vehicle_sn_stored) # DEBUG
 
     if vehicle_sn_stored is None:
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        input("No S/N found in \"%s\". Press Enter to continue. " % cpf_param_filename + colorama.RESET_ALL)
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("No S/N found in \"%s\". Press Enter to continue." % cpf_param_filename + colorama.Style.RESET_ALL)
         return False
     elif vehicle_sn_stored != vehicle_sn_from_filename:
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        input("S/N mismatch: %s in \"%s\". Press Enter to continue. "
-                % (vehicle_sn_stored, cpf_param_filename) + colorama.RESET_ALL)
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("S/N mismatch: %s in \"%s\". Press Enter to continue."
+                % (vehicle_sn_stored, cpf_param_filename) + colorama.Style.RESET_ALL)
         return False
     else:
         return True
@@ -447,14 +448,14 @@ def export_cpf_faults(target_dir, output_filename):
     export_path = os.path.join(target_dir, output_filename)
     if not os.path.exists(export_path):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        print("\nCan't confirm output file existence (\"%s\"). Empty fault history? [Y/N]" % output_filename)
+        print("\nCan't confirm output file existence (\"%s\").\nEmpty fault history [Y/N]? " % output_filename)
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer.upper() == "Y":
             select_program("cpf")
             export_path = None
         else:
             # Accept anything other than a blank input or 'Y' as a No.
-            raise Exception("Can't find cpf_faults file '%s'" % cxf_name)
+            raise Exception("Can't find cpf_faults file '%s'" % output_filename)
 
     gui.hotkey("ctrl", "f4") # Close CPF file.
     return export_path
@@ -609,34 +610,20 @@ if __name__ == "__main__":
     create_file_struct()
     remote_updates()
 
-    if os.listdir(DIR_EXPORT):
-        # Clear export dir before running?
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT +
-                "Export dir populated. Delete contents before processing? [Y / N]")
-        answer = input("> " + colorama.Style.RESET_ALL)
-        if answer.upper() == "Y":
-            print("Removing files...")
-            for item in tqdm(sorted(os.listdir(DIR_EXPORT)), colour="red"):
-                os.remove(os.path.join(DIR_EXPORT, item))
-            print("...done")
-        else:
-            # Accept any answer other than Y/y as negative.
-            pass
-
     if os.name == "nt":
         try:
             convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
             convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
-            print(colorama.Fore.RED + colorama.Style.BRIGHT + "\nGUI interaction done\n")
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction done\n")
             print(colorama.Style.RESET_ALL)
         except gui.FailSafeException:
-            print(colorama.Fore.RED + colorama.Style.BRIGHT + "\n\nUser canceled GUI interaction.")
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser canceled GUI interaction.")
             print(colorama.Style.RESET_ALL)
             time.sleep(3)
             # If user terminates GUI interraction, continue running below.
             pass
     else:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT + "Skipping GUI interaction (requires Windows system.)")
+        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "Skipping GUI interaction (requires Windows system.)")
         print(colorama.Style.RESET_ALL)
 
     print("Syncing processed files to shared folder...")
