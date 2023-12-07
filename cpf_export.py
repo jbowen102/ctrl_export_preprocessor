@@ -236,13 +236,21 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
     update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
     if update_remote_filenames.upper() == "Y":
         print("Updating remote filenames...")
-        datestamp_remote()
-        print("...done")
+        try:
+            datestamp_remote()
+        except KeyboardInterrupt:
+            print("User aborted.\n")
+        else:
+            print("...done")
 
         # Also back up to shared folder for reference.
         print("Syncing source files to shared folder...")
-        sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_SHARE, "Raw"), purge=True)
-        print("...done")
+        try:
+            sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_SHARE, "Raw"), purge=True)
+        except KeyboardInterrupt:
+            print("User aborted.\n")
+        else:
+            print("...done")
     else:
         # Accept any answer other than Y/y as negative.
         print("Skipping remote-dir filename updates.")
