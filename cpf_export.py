@@ -473,7 +473,13 @@ def open_cdf(file_path):
         return
 
     # Assumes CIT project open and Programmer window open, in focus.
-    gui.press(["alt", "f", "i", "c"]) # Import file
+    # Import file
+    gui.press(["alt"])
+    gui.press(["f"])
+    gui.press(["i"])
+    gui.press(["c"])
+
+    gui.press(["enter"]) # Confirm node to use.
 
     gui.hotkey("ctrl", "l") # Select address bar
     gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
@@ -490,7 +496,11 @@ def export_cdf(target_dir, output_filename):
         raise Exception("Can't find target_dir '%s'" % target_dir)
 
     # Assumes CIT project open and Programmer window open, in focus.
-    gui.press(["alt", "f", "e", "s"]) # Export spreadsheet
+    # Export spreadsheet
+    gui.press(["alt"])
+    gui.press(["f"])
+    gui.press(["e"])
+    gui.press(["s"])
 
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(output_filename)
@@ -503,8 +513,10 @@ def export_cdf(target_dir, output_filename):
 
     gui.press(["enter"]) # Click through error
 
+    time.sleep(14) # Allow time for it to write and open Excel file.
     # Opens .xlsx file at end. Not sure how to suppress.
-
+    gui.hotkey("ctrl", "f4") # Close Excel file that opens
+    gui.hotkey("alt", "tab")
     return os.path.join(target_dir, output_filename)
 
 
