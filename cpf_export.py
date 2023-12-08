@@ -7,6 +7,7 @@ import shutil
 from tqdm import tqdm
 import colorama
 from xlsxwriter.workbook import Workbook
+import xlwings as xw
 if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
@@ -312,6 +313,7 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
 
         cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
         export_path = export_cdf(target_dir, cdf_export_filename)
+        # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
 
 
 def select_program(filetype):
@@ -513,10 +515,14 @@ def export_cdf(target_dir, output_filename):
 
     gui.press(["enter"]) # Click through error
 
-    time.sleep(14) # Allow time for it to write and open Excel file.
-    # Opens .xlsx file at end. Not sure how to suppress.
-    gui.hotkey("ctrl", "f4") # Close Excel file that opens
-    gui.hotkey("alt", "tab")
+    time.sleep(15) # Allow time for it to write and open Excel file.
+    # CIT opens .xlsx export automatically.
+    # Close export (doesn't always work):
+    book = xw.Book(os.path.join(target_dir, output_filename))
+    book.close()
+
+    # Re-focus on CIT.
+    gui.click(1477, 17) # Temporary workaround to click title bar of CIT.
     return os.path.join(target_dir, output_filename)
 
 
@@ -559,7 +565,7 @@ def convert_all(file_type, source_dir, dest_dir):
                                 "file-conversion loop, or 'q' to quit program.")
                 answer = input("> " + colorama.Style.RESET_ALL)
                 if answer.lower() == "":
-                    select_program("cpf")
+                    select_program(file_type)
                     continue
                 elif answer.lower() == "e":
                     break
