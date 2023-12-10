@@ -158,7 +158,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
     print(colorama.Style.RESET_ALL)
 
 
-def sync_remote(src, dest, purge=False, multilevel=True):
+def sync_remote(src, dest, multilevel=True, purge=False, silent=False):
     if not os.path.exists(src):
         raise Exception("Can't find src dir '%s'" % src)
     if not os.path.exists(dest):
@@ -176,24 +176,35 @@ def sync_remote(src, dest, purge=False, multilevel=True):
     elif purge and os.name=="posix":
         flags.append("--delete-before")
 
+    if silent and os.name=="nt":
+        flags.extend(["/NFL", "/NDL", "/NJH", "/NJS", "/nc", "/ns", "/np"])
+        # https://stackoverflow.com/questions/3898127/how-can-i-make-robocopy-silent-in-the-command-line-except-for-progress
+    elif silent and os.name=="posix":
+        flags.append("-q")
+        # https://serverfault.com/questions/547106/run-totally-silent-rsync
+
     if os.name=="nt":
-        print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
+        if not silent:
+            print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
         returncode = subprocess.call(["robocopy", src, dest, "/compress"] + flags)
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
 
     elif os.name=="posix":
-        print("Attempting to run rsync..." + colorama.Fore.YELLOW)
+        if not silent:
+            print("Attempting to run rsync..." + colorama.Fore.YELLOW)
         CompProc = subprocess.run(["rsync", "-azivh"] + flags + ["%s/" % src,
                                         "%s/" % dest], stderr=subprocess.STDOUT)
 
-    print(colorama.Style.RESET_ALL)
+    if not silent:
+        print(colorama.Style.RESET_ALL)
 
     # Check for success
     if (os.name=="nt" and returncode < 8) or (os.name=="posix" and CompProc.returncode == 0):
         # https://superuser.com/questions/280425/getting-robocopy-to-return-a-proper-exit-code
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
-        print("Sync to '%s' successful\n" % os.path.basename(dest))
+        if not silent:
+            print("Sync to '%s' successful\n" % os.path.basename(dest))
     else:
         raise Exception("SYNC to '%s' FAILED" % os.path.basename(dest))
 
@@ -205,10 +216,10 @@ def back_up_remote(src=DIR_REMOTE_SRC, dest_root=DIR_REMOTE_BU):
         raise Exception("Can't find dest_root dir '%s'" % dest_root)
 
     # Back up remote source contents before datestamping files on remote.
-    sync_remote(src, os.path.join(dest_root, "mirror"), purge=True)
+    sync_remote(src, os.path.join(dest_root, "mirror"), purge=True, silent=True)
     # Removes any extraneous files from local import folder that don't exist in remote.
 
-    sync_remote(src, os.path.join(dest_root, "union"))
+    sync_remote(src, os.path.join(dest_root, "union"), silent=True)
     # Leaves all in place
 
 
@@ -217,27 +228,16 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         raise Exception("Can't find dest dir '%s'" % dest)
 
     # Pull from remote dir.
-    if os.listdir(dest):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nBack up remote "%s" '
-                            '(overwrites existing local BU)? [Y / N]' % src)
-        run_bu = input("> " + colorama.Style.RESET_ALL)
-    else:
-        # If dest empty, don't prompt for sync. Just do it.
-        run_bu = "Y"
-
-    if run_bu.upper() == "Y":
-        print("Backing up ...")
-        back_up_remote()
-        print("...done")
-    else:
-        print("Skipping remote BU.")
-
     print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
                     'in remote directory (datestamp) "%s"? [Y / N]' % src)
     update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
     if update_remote_filenames.upper() == "Y":
-        print("Updating remote filenames...")
         try:
+            print("Backing up remote files...")
+            back_up_remote()
+            print("...done")
+
+            print("Updating remote filenames...")
             datestamp_remote()
         except KeyboardInterrupt:
             print("User aborted.\n")
