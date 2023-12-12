@@ -141,9 +141,10 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
 
                     new_filename = "%s_sn%s%s" % (datestamp, serial_num, ext)
                     new_filepath = os.path.join(dirpath, new_filename)
-                    os.rename(filepath, new_filepath)
 
                     if file_name != new_filename:
+                        os.rename(filepath, new_filepath)
+
                         old_names.append(file_name)
                         new_names.append(new_filename)
                 # input("> ") # DEBUG
