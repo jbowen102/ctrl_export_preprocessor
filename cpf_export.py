@@ -153,10 +153,11 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
     if len(old_names) > 0:
         for i, name in enumerate(old_names):
             print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
+        input(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nPress Enter to continue"
+                                                    + colorama.Style.RESET_ALL)
     else:
-        print(colorama.Fore.MAGENTA + "[None]")
-    input(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nPress Enter to continue")
-    print(colorama.Style.RESET_ALL)
+        print(colorama.Fore.MAGENTA + "\t[None]" + colorama.Style.RESET_ALL)
+        time.sleep(2) # Pause for user to see that no files were renamed.
 
 
 def sync_remote(src, dest, multilevel=True, purge=False, silent=False):
@@ -243,7 +244,7 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         except KeyboardInterrupt:
             print("User aborted.\n")
         else:
-            print("...done")
+            print("...done\n")
 
         # Also back up to shared folder for reference.
         print("Syncing source files to shared folder...")
