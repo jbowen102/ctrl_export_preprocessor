@@ -208,8 +208,6 @@ def parse_cpf_vehicle_sn(cpf_param_filepath):
                 found_sn_field = True
                 if not field_value:
                     return None
-                # elif field_value == "4294967295":
-                #     return None
                 else:
                     return field_value # string
 

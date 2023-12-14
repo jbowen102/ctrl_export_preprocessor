@@ -373,6 +373,7 @@ def export_cpf_params(target_dir, output_filename):
 
     match = check_cpf_vehicle_sn(export_path)
     if not match:
+        # check_cpf_vehicle_sn() may prompt user to ack. Re-focus CPF program after.
         select_program("cpf")
 
     return export_path
@@ -392,9 +393,17 @@ def check_cpf_vehicle_sn(cpf_param_path):
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
         input("No S/N found in \"%s\". Press Enter to continue." % cpf_param_filename + colorama.Style.RESET_ALL)
         return False
+    elif hex(int(vehicle_sn_stored)) == "0xffffffff":
+        # If vehicle S/N was not written to controller, S/N value in CPF export
+        # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("S/N not stored in controller: Found %s in \"%s\".\nPress Enter to continue."
+                % (hex(int(vehicle_sn_stored)), cpf_param_filename) + colorama.Style.RESET_ALL)
+        return False
     elif vehicle_sn_stored != vehicle_sn_from_filename:
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("S/N mismatch: %s in \"%s\". Press Enter to continue."
+        input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
+                                "(import and export).\nPress Enter to continue."
                 % (vehicle_sn_stored, cpf_param_filename) + colorama.Style.RESET_ALL)
         return False
     else:
