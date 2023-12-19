@@ -8,6 +8,7 @@ from tqdm import tqdm
 import colorama
 from xlsxwriter.workbook import Workbook
 import xlwings as xw
+import openpyxl as pyxl
 if os.name == "nt":
     # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
@@ -526,15 +527,78 @@ def export_cdf(target_dir, output_filename):
 
     gui.press(["enter"]) # Click through error
 
-    time.sleep(15) # Allow time for it to write and open Excel file.
+    time.sleep(20) # Allow time for it to write and open Excel file.
     # CIT opens .xlsx export automatically.
     # Close export (doesn't always work):
-    book = xw.Book(os.path.join(target_dir, output_filename))
+    export_path = os.path.join(target_dir, output_filename)
+    book = xw.Book(export_path)
     book.close()
+
+    match = check_cdf_vehicle_sn(export_path)
+    if not match:
+        # check_cpf_vehicle_sn() may prompt user to ack. Re-focus CPF program after.
+        select_program("cdf")
 
     # Re-focus on CIT.
     gui.click(1477, 17) # Temporary workaround to click title bar of CIT.
     return os.path.join(target_dir, output_filename)
+
+
+def extract_cdf_vehicle_sn(export_filepath):
+
+    workbook = pyxl.load_workbook(filename=export_filepath)
+    # https://realpython.com/openpyxl-excel-spreadsheets-python/
+
+    # Find and select "Menu" sheet
+    sheets = workbook.sheetnames
+    assert "Menu" in sheets, "Unrecognized export format. Expected 'Menu' sheet."
+    menu_sheet = workbook["Menu"]
+
+    assert menu_sheet["T1"].value == "Application Default", "Unrecognized " \
+                            "export format. Expected 'Application Default' " \
+                                                "in column T of 'Menu' sheet."
+
+    # Find row where Vehicle S/N stored. Might not always be in same place.
+    sn_found = False
+    for row in menu_sheet.iter_rows():
+        if row[1].value == "Vehicle Serial Number":
+            vehicle_sn = row[19].value # column T is in position 19.
+            sn_found = True
+
+    if not vehicle_sn:
+        return None
+    else:
+        return vehicle_sn # string
+
+
+def check_cdf_vehicle_sn(cdf_path):
+    cdf_filename = os.path.basename(cdf_path)
+
+    vehicle_sn_stored = extract_cdf_vehicle_sn(cdf_path)
+
+    prompt_str = "Can\'t parse S/N from cdf_filename \"%s\".\n" \
+                                                "Type S/N manually: " % cdf_filename
+    vehicle_sn_from_filename = find_in_string(SN_REGEX, cdf_filename, prompt_str)
+
+    if vehicle_sn_stored is None:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("No S/N found in \"%s\". Press Enter to continue." % cdf_filename + colorama.Style.RESET_ALL)
+        return False
+    elif hex(int(vehicle_sn_stored)) == "0xffffffff":
+        # If vehicle S/N was not written to controller, S/N value in CDF export
+        # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("S/N not stored in controller: Found %s in \"%s\".\nPress Enter to continue."
+                % (hex(int(vehicle_sn_stored)), cdf_filename) + colorama.Style.RESET_ALL)
+        return False
+    elif vehicle_sn_stored != vehicle_sn_from_filename:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
+                                "(import and export).\nPress Enter to continue."
+                % (vehicle_sn_stored, cdf_filename) + colorama.Style.RESET_ALL)
+        return False
+    else:
+        return True
 
 
 def convert_all(file_type, source_dir, dest_dir):
@@ -592,9 +656,7 @@ def convert_all(file_type, source_dir, dest_dir):
 
 
 def convert_cpfs_in_export(dir_path):
-    """Convert CPF exports (.XLS extension but TSV format) to true Excel format.
-    Run as batch to catch any exports that didn't get converted and to delete
-    old pre-converted exports lingering in export folder."""
+    """Convert CPF exports (.XLS extension but TSV format) to true Excel format."""
     if not os.path.exists(dir_path):
         raise Exception("Can't find dir_path '%s'" % dir_path)
 
