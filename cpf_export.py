@@ -312,11 +312,15 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
         fixcpf.combine_param_and_fault_export(cpf_params_path, cpf_faults_path, cpf_combined_export_path)
 
     elif file_type.lower() == ".cdf":
-        open_cdf(cxf_path)
+        valid_cdf = open_cdf(cxf_path)
 
-        cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
-        export_path = export_cdf(target_dir, cdf_export_filename)
-        # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
+        if valid_cdf:
+            cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
+            export_path = export_cdf(target_dir, cdf_export_filename)
+            # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
+        else:
+            print("\n\tSkipping %s (empty file)." % os.path.basename(cxf_path))
+
 
 
 def select_program(filetype):
@@ -482,9 +486,8 @@ def open_cdf(file_path):
     # Assumes CIT program already in focus.
     # Ensure file is nonzero size. CIT gives error window for empty file.
     if not os.path.getsize(file_path):
-        print("\tSkipping %s (empty file)." % os.path.basename(file_path))
-        # Skip file
-        return
+        # Skip empty file
+        return False
 
     # Assumes CIT project open and Programmer window open, in focus.
     # Import file
@@ -503,6 +506,8 @@ def open_cdf(file_path):
     gui.typewrite(os.path.basename(file_path))
     gui.press(["enter"]) # Confirm filename to open.
     time.sleep(1) # Allow time for file to open.
+
+    return True
 
 
 def export_cdf(target_dir, output_filename):
@@ -547,6 +552,7 @@ def export_cdf(target_dir, output_filename):
 def extract_cdf_vehicle_sn(export_filepath):
 
     workbook = pyxl.load_workbook(filename=export_filepath)
+    # https://openpyxl.readthedocs.io/en/stable/tutorial.html
     # https://realpython.com/openpyxl-excel-spreadsheets-python/
 
     # Find and select "Menu" sheet
