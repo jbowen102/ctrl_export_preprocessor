@@ -23,7 +23,7 @@ from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
                         DIR_EXPORT, DIR_EXPORT_BUFFER, \
-                      DIR_REMOTE_SHARE, \
+                      DIR_REMOTE_SHARE, AZ_BLOB_ADDR, \
                       ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
@@ -730,3 +730,13 @@ if __name__ == "__main__":
     print("Syncing processed files to shared folder...")
     sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True, multilevel=False)
     print("...done")
+
+    if os.name=="nt":
+        # returncode = subprocess.call(["azcopy", "cp", "--overwrite", "ifSourceNewer", os.path.join(DIR_EXPORT, "/*.xlsx"), AZ_BLOB_ADDR])
+        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-copy
+        # azcopy cp doesn't purge extraneous files
+        print("Running AzCopy sync job...")
+        print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_EXPORT + "\\", AZ_BLOB_ADDR])
+        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+        print(colorama.Style.RESET_ALL + "...done")
