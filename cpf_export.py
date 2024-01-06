@@ -310,6 +310,7 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
         cpf_combined_export_filename = os.path.splitext(cxf_name)[0] + CPF_COMBINED_EXPORT_SUFFIX
         cpf_combined_export_path = os.path.join(target_dir, cpf_combined_export_filename)
         fixcpf.combine_param_and_fault_export(cpf_params_path, cpf_faults_path, cpf_combined_export_path)
+        return True
 
     elif file_type.lower() == ".cdf":
         valid_cdf = open_cdf(cxf_path)
@@ -318,8 +319,10 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
             cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
             export_path = export_cdf(target_dir, cdf_export_filename)
             # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
+            return True
         else:
             print("\n\tSkipping %s (empty file)." % os.path.basename(cxf_path))
+            return False
 
 
 
@@ -636,7 +639,7 @@ def convert_all(file_type, source_dir, dest_dir):
         if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
             try:
-                convert_file(filepath, dest_dir)
+                success = convert_file(filepath, dest_dir)
             except Exception as exception_text:
                 print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
                 print("\nEncountered exception processing %s" % filename + colorama.Style.RESET_ALL)
@@ -654,7 +657,8 @@ def convert_all(file_type, source_dir, dest_dir):
                     # Accept anything other than a blank input or 'e' as a quit command.
                     quit()
             else:
-                tqdm.write("Processed %s" % filename)
+                if success:
+                    tqdm.write("Processed %s" % filename)
 
         else:
             # Skip directories
