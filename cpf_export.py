@@ -33,7 +33,7 @@ SN_REGEX = r"(3\d{6}|5\d{6}|8\d{6})"
 DATE_REGEX = r"(20\d{2}[0-1]\d[0-3]\d)"
 # Any "20" followed by two digits,
     # followed by either "0" or "1" and any digit (months)
-        # followed by either "0", "1", "2", or "3" paired with any digit (days 01-31)
+        # followed by either "0", "1", "2", or "3" paired with any digit (days 00-39)
 # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
 
 
@@ -325,7 +325,6 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
             return False
 
 
-
 def select_program(filetype):
     # Brings conversion program into focus.
     answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK is off, then click OK." % filetype.upper())
@@ -544,7 +543,7 @@ def export_cdf(target_dir, output_filename):
 
     match = check_cdf_vehicle_sn(export_path)
     if not match:
-        # check_cpf_vehicle_sn() may prompt user to ack. Re-focus CPF program after.
+        # check_cdf_vehicle_sn() may prompt user to ack. Re-focus CDF program after.
         select_program("cdf")
 
     # Re-focus on CIT.
@@ -711,6 +710,16 @@ if __name__ == "__main__":
     create_file_struct()
     remote_updates()
 
+    print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+    print("Press Enter to proceed to file processing or 'q' to quit program.")
+    answer = input("> " + colorama.Style.RESET_ALL)
+    if answer == "":
+        pass
+    else:
+        # Accept anything other than a blank input as a quit command.
+        quit()
+
+
     if os.name == "nt":
         try:
             convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
@@ -731,11 +740,9 @@ if __name__ == "__main__":
     sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True, multilevel=False)
     print("...done")
 
+    # Sync to second remote (Azure blob)
     if os.name=="nt":
-        # returncode = subprocess.call(["azcopy", "cp", "--overwrite", "ifSourceNewer", os.path.join(DIR_EXPORT, "/*.xlsx"), AZ_BLOB_ADDR])
-        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-copy
-        # azcopy cp doesn't purge extraneous files
-        print("Running AzCopy sync job...")
+        print("\nRunning AzCopy sync job...")
         print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
         returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_EXPORT + "\\", AZ_BLOB_ADDR])
         # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync

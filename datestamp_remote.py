@@ -1,6 +1,5 @@
 import os.path
 
-
 import cpf_export as cpf
 from dir_names import DIR_REMOTE_SRC, DIR_REMOTE_SHARE
 
