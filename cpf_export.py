@@ -23,7 +23,8 @@ from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
                         DIR_EXPORT, DIR_EXPORT_BUFFER, \
-                      DIR_REMOTE_SHARE, AZ_BLOB_ADDR, \
+                      DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, \
+                      AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, \
                       ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
@@ -250,7 +251,7 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         # Also back up to shared folder for reference.
         print("Syncing source files to shared folder...")
         try:
-            sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_SHARE, "Raw"), purge=True)
+            sync_remote(DIR_REMOTE_SRC, os.path.join(DIR_REMOTE_SHARE_CTRL, "Raw"), purge=True)
         except KeyboardInterrupt:
             print("User aborted.\n")
         else:
@@ -737,13 +738,25 @@ if __name__ == "__main__":
         print(colorama.Style.RESET_ALL)
 
     print("Syncing processed files to shared folder...")
-    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE, "Converted"), purge=True, multilevel=False)
+    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"), purge=True, multilevel=False)
     print("...done")
 
     # Sync to second remote (Azure blob)
     if os.name=="nt":
-        print("\nRunning AzCopy sync job...")
+        print("\nRunning AzCopy sync job (controller exports)...")
         print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_EXPORT + "\\", AZ_BLOB_ADDR])
+        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
         # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
         print(colorama.Style.RESET_ALL + "...done")
+
+    print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+    print("\nSync battery export too? Enter to proceed or 'q' to quit program.")
+    answer = input("> " + colorama.Style.RESET_ALL)
+    if answer == "":
+        print("\nRunning AzCopy sync job (batt export)...")
+        print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
+        print(colorama.Style.RESET_ALL + "...done")
+    else:
+        # Accept anything other than a blank input as a quit command.
+        quit()
