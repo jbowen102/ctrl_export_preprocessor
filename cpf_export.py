@@ -565,32 +565,6 @@ def extract_cdf_vehicle_sn(export_filepath):
                                         but instead is '%'." % row["VCL Alias"]
             vehicle_sn_param = row["Application Default"]
 
-    menu_df = pd.read_excel(export_filepath, sheet_name="Menu")
-    assert "Application Default" in menu_df.columns
-
-    # Get index where one of the Unnamed columns has "Vehicle Serial Number" in it.
-    for index, unnamed_cols_row in menu_df.filter(like="Unnamed").iterrows():
-        if "Vehicle Serial Number" in unnamed_cols_row.values:
-            # Store the value from the Application Default col at this index
-            #     (row # where "Vehicle Serial Number" label found)
-            vehicle_sn_var = menu_df.iloc[index]["Variable Name"]
-            assert vehicle_sn_var == "nvuser4", "Expected Vehicle Serial Number \
-                                                menu item to have 'nvuser4' \
-                                                Variable Name, but has '%s' \
-                                                instead." % vehicle_sn_var
-            if "VCL Alias" in menu_df.columns:
-                vehicle_sn_alias = menu_df.iloc[index]["VCL Alias"]
-                assert vehicle_sn_alias == "NV_VehicleSerialNumber", "Expected \
-                                    Vehicle Serial Number menu item to have \
-                                    'NV_VehicleSerialNumber' VCL Alias, but has \
-                                    '%s' instead." % vehicle_sn_alias
-
-            vehicle_sn_menu = menu_df.iloc[index]["Application Default"]
-
-    # Compare the two values
-    assert vehicle_sn_param == vehicle_sn_menu, "Vehicle S/N values found in \
-                                            Parameters tab and Menu tab differ."
-
     if not vehicle_sn_param:
         return None
     else:
