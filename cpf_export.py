@@ -229,6 +229,11 @@ def back_up_remote(src=DIR_REMOTE_SRC, dest_root=DIR_REMOTE_BU):
 
 
 def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
+    """1. Back up remote files locally.
+       2. Update filenames in remote source where new raw files appear.
+       3. Sync renamed remote source files to shared folder.
+       4. Sync renamed remote source files locally.
+    """
     if not os.path.exists(dest):
         raise Exception("Can't find dest dir '%s'" % dest)
 
@@ -261,6 +266,7 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         # Accept any answer other than Y/y as negative.
         print("Skipping remote-dir filename updates.")
 
+    # Sync renamed remote source files locally.
     print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local import '
                                                     'dir from remote? [Y / N]')
     update_import_dir = input("> " + colorama.Style.RESET_ALL)
@@ -329,7 +335,8 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
 
 def select_program(filetype):
     # Brings conversion program into focus.
-    answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK is off, then click OK." % filetype.upper())
+    answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK "
+                                    "is off, then click OK." % filetype.upper())
     if answer == "OK":
         print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
                     "commencing (%s). Move mouse pointer to upper left of "
@@ -699,55 +706,93 @@ def create_file_struct():
 
 if __name__ == "__main__":
 
+    # Set up directory structure if absent on local machine.
     create_file_struct()
+    # Remote source backup, filename updates, sync remote locally and to shared folder
     remote_updates()
 
-    print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-    print("Press Enter to proceed to file processing or 'q' to quit program.")
-    answer = input("> " + colorama.Style.RESET_ALL)
-    if answer == "":
-        pass
-    else:
-        # Accept anything other than a blank input as a quit command.
-        quit()
-
-
+    # Convert exports
     if os.name == "nt":
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("Press Enter to proceed to file processing or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            pass
+        else:
+            # Accept anything other than a blank input as a quit command.
+            quit()
+
         try:
             convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
             convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction done\n")
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI "
+                                                            "interaction done\n")
             print(colorama.Style.RESET_ALL)
         except gui.FailSafeException:
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser canceled GUI interaction.")
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser "
+                                                    "canceled GUI interaction.")
             print(colorama.Style.RESET_ALL)
             time.sleep(3)
             # If user terminates GUI interraction, continue running below.
             pass
     else:
-        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "Skipping GUI interaction (requires Windows system.)")
+        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "Skipping GUI "
+                                    "interaction (requires Windows system).")
         print(colorama.Style.RESET_ALL)
 
-    print("Syncing processed files to shared folder...")
-    sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"), purge=True, multilevel=False)
-    print("...done")
 
-    # Sync to second remote (Azure blob)
-    if os.name=="nt":
-        print("\nRunning AzCopy sync job (controller exports)...")
-        print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
-        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
-        print(colorama.Style.RESET_ALL + "...done")
-
+    # Sync to shared folder
     print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-    print("\nSync battery export too? Enter to proceed or 'q' to quit program.")
+    print("\nSync controller export dir to shared folder? Enter to proceed, "
+                                        "'s' to skip, or 'q' to quit program.")
     answer = input("> " + colorama.Style.RESET_ALL)
     if answer == "":
-        print("\nRunning AzCopy sync job (batt export)...")
-        print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-        returncode = subprocess.call(["azcopy", "sync", "--delete-destination", "true", DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
-        print(colorama.Style.RESET_ALL + "...done")
+        print("Syncing processed files to shared folder...")
+        sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
+                                                purge=True, multilevel=False)
+        print("...done")
+    elif answer.lower() == "s":
+        print("Skipping shared-folder sync.")
     else:
         # Accept anything other than a blank input as a quit command.
         quit()
+
+
+    # Sync to second remote (Azure blob)
+    if os.name=="nt":
+        # Controller exports
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nSync controller export dir to Azure blob? Enter to proceed, "
+                                        "'s' to skip, or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            print("\nRunning AzCopy sync job (controller exports)...")
+            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            returncode = subprocess.call(["azcopy", "sync",
+                                                "--delete-destination", "true",
+                                        DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
+            # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+            print(colorama.Style.RESET_ALL + "...done")
+        elif answer.lower() == "s":
+            print("Skipping sync from ctrl-export folder to shared folder.")
+        else:
+            # Accept anything other than a blank input as a quit command.
+            quit()
+
+        # Batt export dir
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nSync battery export dir from shared folder to Azure blob? "
+                                    "Enter to proceed or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            print("\nRunning AzCopy sync job (batt export)...")
+            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            returncode = subprocess.call(["azcopy", "sync",
+                                                "--delete-destination", "true",
+                                DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
+            print(colorama.Style.RESET_ALL + "...done")
+        else:
+            print("Skipping sync from batt dir to shared folder.")
+
+    else:
+        print("Skipping AzCopy jobs (requires Windows system).")
