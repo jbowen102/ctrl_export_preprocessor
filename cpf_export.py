@@ -4,6 +4,7 @@ import re
 import subprocess
 import shutil
 
+import pandas as pd
 from tqdm import tqdm
 import colorama
 from xlsxwriter.workbook import Workbook
@@ -554,30 +555,46 @@ def export_cdf(target_dir, output_filename):
 
 def extract_cdf_vehicle_sn(export_filepath):
 
-    workbook = pyxl.load_workbook(filename=export_filepath)
-    # https://openpyxl.readthedocs.io/en/stable/tutorial.html
-    # https://realpython.com/openpyxl-excel-spreadsheets-python/
+    param_df = pd.read_excel(export_filepath, sheet_name="Parameters")
+    for _, row in param_df.iterrows():
+        if row["Variable Name"] == "nvuser4":
+            # Check if VCL Alias column available (old CIT versions don't include it.)
+            if "VCL Alias" in param_df.columns:
+                assert row["VCL Alias"] == "NV_VehicleSerialNumber", "Expected \
+                    'VCL Alias' of 'nvuser4' variable to be 'NV_VehicleSerialNumber', \
+                                        but instead is '%'." % row["VCL Alias"]
+            vehicle_sn_param = row["Application Default"]
 
-    # Find and select "Menu" sheet
-    sheets = workbook.sheetnames
-    assert "Menu" in sheets, "Unrecognized export format. Expected 'Menu' sheet."
-    menu_sheet = workbook["Menu"]
+    menu_df = pd.read_excel(export_filepath, sheet_name="Menu")
+    assert "Application Default" in menu_df.columns
 
-    assert menu_sheet["T1"].value == "Application Default", "Unrecognized " \
-                            "export format. Expected 'Application Default' " \
-                                                "in column T of 'Menu' sheet."
+    # Get index where one of the Unnamed columns has "Vehicle Serial Number" in it.
+    for index, unnamed_cols_row in menu_df.filter(like="Unnamed").iterrows():
+        if "Vehicle Serial Number" in unnamed_cols_row.values:
+            # Store the value from the Application Default col at this index
+            #     (row # where "Vehicle Serial Number" label found)
+            vehicle_sn_var = menu_df.iloc[index]["Variable Name"]
+            assert vehicle_sn_var == "nvuser4", "Expected Vehicle Serial Number \
+                                                menu item to have 'nvuser4' \
+                                                Variable Name, but has '%s' \
+                                                instead." % vehicle_sn_var
+            if "VCL Alias" in menu_df.columns:
+                vehicle_sn_alias = menu_df.iloc[index]["VCL Alias"]
+                assert vehicle_sn_alias == "NV_VehicleSerialNumber", "Expected \
+                                    Vehicle Serial Number menu item to have \
+                                    'NV_VehicleSerialNumber' VCL Alias, but has \
+                                    '%s' instead." % vehicle_sn_alias
 
-    # Find row where Vehicle S/N stored. Might not always be in same place.
-    sn_found = False
-    for row in menu_sheet.iter_rows():
-        if row[1].value == "Vehicle Serial Number":
-            vehicle_sn = row[19].value # column T is in position 19.
-            sn_found = True
+            vehicle_sn_menu = menu_df.iloc[index]["Application Default"]
 
-    if not vehicle_sn:
+    # Compare the two values
+    assert vehicle_sn_param == vehicle_sn_menu, "Vehicle S/N values found in \
+                                            Parameters tab and Menu tab differ."
+
+    if not vehicle_sn_param:
         return None
     else:
-        return vehicle_sn # string
+        return vehicle_sn_param # string
 
 
 def check_cdf_vehicle_sn(cdf_path):
