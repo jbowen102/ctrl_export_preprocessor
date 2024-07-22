@@ -52,6 +52,10 @@ class UserCancel(Exception):
 
 
 def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, allow_none=False):
+    """Finds single match in string_to_search or presents prompt to user.
+    If allow_none set to True, prompt only given upon multiple matches.
+    date_target=True adds date validation.
+    """
     found = None # Initialize variable for loop
     while not found:
         matches = re.findall(regex_pattern, string_to_search, flags=re.IGNORECASE)
@@ -76,7 +80,7 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
             # print("\t\t%s: no matches; returning None" % string_to_search) # DEBUG
             return None
 
-        # No matches, or invalid date found:
+        # No matches, multiple matches, or invalid date found:
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
         string_to_search = input("> " + colorama.Style.RESET_ALL)
 
@@ -567,12 +571,40 @@ def extract_cdf_vehicle_sn(export_filepath):
         if row["Variable Name"] == "nvuser4":
             # Check if VCL Alias column available (old CIT versions don't include it.)
             if "VCL Alias" in param_df.columns:
-                assert row["VCL Alias"] == "NV_VehicleSerialNumber", "Expected \
-                    'VCL Alias' of 'nvuser4' variable to be 'NV_VehicleSerialNumber', \
-                                        but instead is '%'." % row["VCL Alias"]
+                error_text = ("Expected 'VCL Alias' of 'nvuser4' variable to be "
+                "'NV_VehicleSerialNumber', but instead is '%s'." % row["VCL Alias"])
+                assert row["VCL Alias"] == "NV_VehicleSerialNumber", error_text
+
             vehicle_sn_param = row["Application Default"]
 
-    if not vehicle_sn_param:
+    if not vehicle_sn_param or pd.isna(vehicle_sn_param):
+        # Empty value
+        return None
+    elif vehicle_sn_param.isdecimal() and hex(int(vehicle_sn_param)) == "0xffffffff":
+        # If vehicle S/N was not written to controller, S/N value in CDF export
+        # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
+        # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
+                % (hex(int(vehicle_sn_param)), os.path.basename(export_filepath)) + colorama.Style.RESET_ALL)
+        return None
+
+    # Validate that S/N value conforms to expected format.
+    prompt_str = ("Found multiple possible S/N values stored in CDF: '%s'. Press Enter to continue." % vehicle_sn_param)
+    valid_sn = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
+    if valid_sn is None:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("Expected 'nvuser4' variable to contain S/N in 7-digit format starting "
+                        "with 3, 5, or 8.\nFound '%s' in %s instead."
+                        % (vehicle_sn_param, os.path.basename(export_filepath))
+                                                    + colorama.Style.RESET_ALL)
+        return None
+    elif valid_sn != vehicle_sn_param:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("'nvuser4' value '%s' (in %s) appears to contain S/N with right format but "
+                        "may contain additional content."
+                        % (vehicle_sn_param, os.path.basename(export_filepath))
+                                                     + colorama.Style.RESET_ALL)
         return None
     else:
         return vehicle_sn_param # string
@@ -589,14 +621,7 @@ def check_cdf_vehicle_sn(cdf_path):
 
     if vehicle_sn_stored is None:
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("No S/N found in \"%s\". Press Enter to continue." % cdf_filename + colorama.Style.RESET_ALL)
-        return False
-    elif hex(int(vehicle_sn_stored)) == "0xffffffff":
-        # If vehicle S/N was not written to controller, S/N value in CDF export
-        # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("S/N not stored in controller: Found %s in \"%s\".\nPress Enter to continue."
-                % (hex(int(vehicle_sn_stored)), cdf_filename) + colorama.Style.RESET_ALL)
+        input("No valid S/N found in \"%s\". Press Enter to continue." % cdf_filename + colorama.Style.RESET_ALL)
         return False
     elif vehicle_sn_stored != vehicle_sn_from_filename:
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
