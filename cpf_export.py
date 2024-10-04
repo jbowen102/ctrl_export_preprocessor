@@ -47,6 +47,8 @@ CPF_COMBINED_EXPORT_SUFFIX = "_cpf.xlsx"
 
 ERROR_HISTORY_SAVE_BUTTON_LOC = None # Will be modified below
 
+GUI_PAUSE_MULT = 1.0 # Extend or reduce pauses between GUI commands
+
 
 class UserCancel(Exception):
     pass
@@ -162,7 +164,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                                                     + colorama.Style.RESET_ALL)
     else:
         print(colorama.Fore.MAGENTA + "\t[None]" + colorama.Style.RESET_ALL)
-        time.sleep(2) # Pause for user to see that no files were renamed.
+        time.sleep(2 * GUI_PAUSE_MULT) # Pause for user to see that no files were renamed.
 
 
 def sync_remote(src, dest, multilevel=True, purge=False, silent=False):
@@ -373,7 +375,7 @@ def open_cpf(file_path):
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(os.path.basename(file_path))
     gui.press(["enter"]) # Confirm filename to open.
-    time.sleep(1) # Allow time for to open.
+    time.sleep(1 * GUI_PAUSE_MULT) # Allow time for to open.
 
     return True
 
@@ -393,7 +395,7 @@ def export_cpf_params(target_dir, output_filename, validate_sn):
     gui.typewrite(target_dir) # Navigate to target export folder.
     gui.press(["enter"])
     gui.hotkey("alt", "s") # Save
-    time.sleep(0.2)
+    time.sleep(0.2 * GUI_PAUSE_MULT)
 
     # Check if new file exists in exported location as expected after conversion.
     export_path = os.path.join(target_dir, output_filename)
@@ -494,7 +496,7 @@ def export_cpf_faults(target_dir, output_filename):
     gui.typewrite(target_dir) # Navigate to target export folder.
     gui.press(["enter"])
     gui.hotkey("alt", "s") # Save
-    time.sleep(0.2)
+    time.sleep(0.2 * GUI_PAUSE_MULT)
 
     # Check if new file exists in exported location as expected after conversion.
     export_path = os.path.join(target_dir, output_filename)
@@ -539,7 +541,7 @@ def open_cdf(file_path):
     gui.hotkey("alt", "n") # Select filename field
     gui.typewrite(os.path.basename(file_path))
     gui.press(["enter"]) # Confirm filename to open.
-    time.sleep(1) # Allow time for file to open.
+    time.sleep(1 * GUI_PAUSE_MULT) # Allow time for file to open.
 
     return True
 
@@ -562,11 +564,11 @@ def export_cdf(target_dir, output_filename, validate_sn):
     gui.typewrite(target_dir) # Navigate to target export folder.
     gui.press(["enter"])
     gui.hotkey("alt", "s") # Save
-    time.sleep(0.75)
+    time.sleep(0.75 * GUI_PAUSE_MULT)
 
     gui.press(["enter"]) # Click through error
 
-    time.sleep(20) # Allow time for it to write and open Excel file.
+    time.sleep(20 * GUI_PAUSE_MULT) # Allow time for it to write and open Excel file.
     # CIT opens .xlsx export automatically.
     # Close export (doesn't always work):
     export_path = os.path.join(target_dir, output_filename)
@@ -799,7 +801,7 @@ if __name__ == "__main__":
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser "
                                                     "canceled GUI interaction.")
             print(colorama.Style.RESET_ALL)
-            time.sleep(3)
+            time.sleep(3 * GUI_PAUSE_MULT)
             # If user terminates GUI interraction, continue running below.
             pass
     else:
