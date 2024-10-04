@@ -4,6 +4,7 @@ import re
 import subprocess
 import shutil
 
+import argparse
 import pandas as pd
 from tqdm import tqdm
 import colorama
@@ -69,12 +70,9 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
                 pass
             else:
                 # Valid date
-                found = matches[0]
-                # print("\t\t%s: found %s (date that passed both checks)" % (string_to_search, found)) # DEBUG
-                return found
+                return matches[0]
         elif len(matches) == 1:
-            found = matches[0]
-            return found
+            return matches[0]
             # loop exits
         elif len(matches) == 0 and allow_none:
             # print("\t\t%s: no matches; returning None" % string_to_search) # DEBUG
@@ -82,7 +80,7 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
 
         # No matches, multiple matches, or invalid date found:
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
-        string_to_search = input("> " + colorama.Style.RESET_ALL)
+        string_to_search = input(">" + colorama.Style.RESET_ALL)
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
@@ -283,7 +281,12 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         print("Skipping import-dir update from remote.\n")
 
 
-def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=True):
+def convert_file(cxf_path, target_dir, tmp_dir=None, check_sn=False, gui_in_focus=False):
+    """
+    Converts either a CPF or CDF to Excel format.
+    tmp_dir path only required for processing CPFs.
+    check_sn indicates whether to validate vehicle S/N in filename.
+    """
     if not os.path.exists(cxf_path):
         raise Exception("Can't find src file '%s'" % cxf_path)
     if not os.path.exists(target_dir):
@@ -292,6 +295,20 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
     file_type = os.path.splitext(cxf_path)[-1]
     cxf_name = os.path.basename(cxf_path)
 
+    if file_type.lower() == ".cpf" and tmp_dir is None:
+        tmp_dir_try = os.path.join(target_dir, "tmp")
+        if os.path.exists(tmp_dir_try):
+            print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
+            print("Use %s as temp dir for CPF processing? [Y/N]" % tmp_dir_try)
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            answer = input("> " + colorama.Style.RESET_ALL)
+            if answer.lower() != "y":
+                raise Exception("Need temp dir to process CPF files.")
+            # Fall through to assignment below
+        else:
+            os.mkdir(tmp_dir_try) # Will leave in place after processing finished.
+        tmp_dir = tmp_dir_try
+
     if not gui_in_focus:
         select_program(os.path.splitext(cxf_path)[-1][1:])
 
@@ -299,24 +316,25 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
         cpf_open = False
         # Open CPF in GUI and export parameters if export doesn't exist already.
         cpf_param_export_filename = os.path.splitext(cxf_name)[0] + CPF_PARAM_EXPORT_SUFFIX
-        if not os.path.exists(os.path.join(temp_dir, cpf_param_export_filename)):
+        if not os.path.exists(os.path.join(tmp_dir, cpf_param_export_filename)):
             cpf_open = open_cpf(cxf_path)
-            cpf_params_path = export_cpf_params(temp_dir, cpf_param_export_filename)
+            cpf_params_path = export_cpf_params(tmp_dir, cpf_param_export_filename,
+                                                            validate_sn=check_sn)
         else:
-            cpf_params_path = os.path.join(temp_dir, cpf_param_export_filename)
+            cpf_params_path = os.path.join(tmp_dir, cpf_param_export_filename)
 
         # Open CPF in GUI and export faults if export doesn't exist already.
         cpf_fault_export_filename = os.path.splitext(cxf_name)[0] + CPF_FAULT_EXPORT_SUFFIX
-        if not os.path.exists(os.path.join(temp_dir, cpf_fault_export_filename)):
+        if not os.path.exists(os.path.join(tmp_dir, cpf_fault_export_filename)):
             if not cpf_open:
                 cpf_open = open_cpf(cxf_path)
 
             # Export faults
-            cpf_faults_path = export_cpf_faults(temp_dir, cpf_fault_export_filename)
+            cpf_faults_path = export_cpf_faults(tmp_dir, cpf_fault_export_filename)
 
         else:
             # If it already exists in temp dir from previous processing.
-            cpf_faults_path = os.path.join(temp_dir, cpf_fault_export_filename)
+            cpf_faults_path = os.path.join(tmp_dir, cpf_fault_export_filename)
 
         # Combine both tsvs to single export file.
         cpf_combined_export_filename = os.path.splitext(cxf_name)[0] + CPF_COMBINED_EXPORT_SUFFIX
@@ -329,7 +347,7 @@ def convert_file(cxf_path, target_dir, temp_dir=DIR_EXPORT_BUFFER, gui_in_focus=
 
         if valid_cdf:
             cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
-            export_path = export_cdf(target_dir, cdf_export_filename)
+            export_path = export_cdf(target_dir, cdf_export_filename, validate_sn=check_sn)
             # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
             return True
         else:
@@ -370,7 +388,7 @@ def open_cpf(file_path):
     return True
 
 
-def export_cpf_params(target_dir, output_filename):
+def export_cpf_params(target_dir, output_filename, validate_sn):
     if not os.path.exists(target_dir):
         raise Exception("Can't find target_dir '%s'" % target_dir)
 
@@ -391,10 +409,11 @@ def export_cpf_params(target_dir, output_filename):
     export_path = os.path.join(target_dir, output_filename)
     assert os.path.exists(export_path), "Can't confirm output file existence."
 
-    match = check_cpf_vehicle_sn(export_path)
-    if not match:
-        # check_cpf_vehicle_sn() may prompt user to ack. Re-focus CPF program after.
-        select_program("cpf")
+    if validate_sn:
+        match = check_cpf_vehicle_sn(export_path)
+        if not match:
+            # check_cpf_vehicle_sn() may prompt user to ack. Re-focus CPF program after.
+            select_program("cpf")
 
     return export_path
 
@@ -525,7 +544,7 @@ def open_cdf(file_path):
     return True
 
 
-def export_cdf(target_dir, output_filename):
+def export_cdf(target_dir, output_filename, validate_sn):
     if not os.path.exists(target_dir):
         raise Exception("Can't find target_dir '%s'" % target_dir)
 
@@ -554,10 +573,11 @@ def export_cdf(target_dir, output_filename):
     book = xw.Book(export_path)
     book.close()
 
-    match = check_cdf_vehicle_sn(export_path)
-    if not match:
-        # check_cdf_vehicle_sn() may prompt user to ack. Re-focus CDF program after.
-        select_program("cdf")
+    if validate_sn:
+        match = check_cdf_vehicle_sn(export_path)
+        if not match:
+            # check_cdf_vehicle_sn() may prompt user to ack. Re-focus CDF program after.
+            select_program("cdf")
 
     # Re-focus on CIT.
     gui.click(1477, 17) # Temporary workaround to click title bar of CIT.
@@ -633,7 +653,7 @@ def check_cdf_vehicle_sn(cdf_path):
         return True
 
 
-def convert_all(file_type, source_dir, dest_dir):
+def convert_all(file_type, source_dir, dest_dir, check_SNs=False):
     if not os.path.exists(source_dir):
         raise Exception("Can't find source_dir '%s'" % source_dir)
     if not os.path.exists(dest_dir):
@@ -662,7 +682,9 @@ def convert_all(file_type, source_dir, dest_dir):
         if (os.path.isfile(filepath) and
                     os.path.splitext(filename)[-1].lower() == ".%s" % file_type):
             try:
-                success = convert_file(filepath, dest_dir)
+                success = convert_file(filepath, dest_dir,
+                                tmp_dir=DIR_EXPORT_BUFFER, check_sn=check_SNs,
+                                                              gui_in_focus=True)
             except Exception as exception_text:
                 print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
                 print("\nEncountered exception processing %s" % filename + colorama.Style.RESET_ALL)
@@ -730,14 +752,33 @@ def create_file_struct():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Program to convert CPF or CDF "
+                                    "exports from binary to .xlsx file format.")
+    parser.add_argument("-d", "--dir", help="Specify dir containing exports "
+                                                        "to convert.", type=str)
+    # parser.add_argument("-f", "--file", help="Specify file path of one export  " # maybe implement later
+    #                                                     "to reformat.", type=str)
+    # parser.add_argument("-a", "--auto", help="Specify to execute entire routine " # maybe implement later
+    #             "of downloading new exports from remote drive, converting all, "
+    #                     "and uploading to Azure blob.", action="store_true")
+    args = parser.parse_args()
 
-    # Set up directory structure if absent on local machine.
-    create_file_struct()
-    # Remote source backup, filename updates, sync remote locally and to shared folder
-    remote_updates()
+    # Default is auto-run, but if user specifies --dir, disable auto-run.
 
-    # Convert exports
-    if os.name == "nt":
+    if args.dir:
+        auto_run = False
+        check_vehicle_sns = False
+        import_dir = args.dir
+        export_dir = args.dir
+    else:
+        auto_run = True
+        check_vehicle_sns = True
+        import_dir = DIR_IMPORT
+        export_dir = DIR_EXPORT
+        # Set up directory structure if absent on local machine.
+        create_file_struct()
+        # Remote source backup, filename updates, sync remote locally and to shared folder
+        remote_updates()
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
         print("Press Enter to proceed to file processing or 'q' to quit program.")
         answer = input("> " + colorama.Style.RESET_ALL)
@@ -747,9 +788,11 @@ if __name__ == "__main__":
             # Accept anything other than a blank input as a quit command.
             quit()
 
+    # Convert exports
+    if os.name == "nt":
         try:
-            convert_all("cpf", DIR_IMPORT, DIR_EXPORT)
-            convert_all("cdf", DIR_IMPORT, DIR_EXPORT)
+            convert_all("cpf", import_dir, export_dir, check_SNs=check_vehicle_sns)
+            convert_all("cdf", import_dir, export_dir, check_SNs=check_vehicle_sns)
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI "
                                                             "interaction done\n")
             print(colorama.Style.RESET_ALL)
@@ -766,58 +809,59 @@ if __name__ == "__main__":
         print(colorama.Style.RESET_ALL)
 
 
-    # Sync to shared folder
-    print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-    print("\nSync controller export dir to shared folder? Enter to proceed, "
-                                        "'s' to skip, or 'q' to quit program.")
-    answer = input("> " + colorama.Style.RESET_ALL)
-    if answer == "":
-        print("Syncing processed files to shared folder...")
-        sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
-                                                purge=True, multilevel=False)
-        print("...done")
-    elif answer.lower() == "s":
-        print("Skipping shared-folder sync.")
-    else:
-        # Accept anything other than a blank input as a quit command.
-        quit()
-
-
-    # Sync to second remote (Azure blob)
-    if os.name=="nt":
-        # Controller exports
+    if auto_run:
+        # Sync to shared folder
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        print("\nSync controller export dir to Azure blob? Enter to proceed, "
-                                        "'s' to skip, or 'q' to quit program.")
+        print("\nSync controller export dir to shared folder? Enter to proceed, "
+                                            "'s' to skip, or 'q' to quit program.")
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer == "":
-            print("\nRunning AzCopy sync job (controller exports)...")
-            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-            returncode = subprocess.call(["azcopy", "sync",
-                                                "--delete-destination", "true",
-                                        DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
-            # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
-            print(colorama.Style.RESET_ALL + "...done")
+            print("Syncing processed files to shared folder...")
+            sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
+                                                    purge=True, multilevel=False)
+            print("...done")
         elif answer.lower() == "s":
-            print("Skipping sync from ctrl-export folder to shared folder.")
+            print("Skipping shared-folder sync.")
         else:
             # Accept anything other than a blank input as a quit command.
             quit()
 
-        # Batt export dir
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        print("\nSync battery export dir from shared folder to Azure blob? "
-                                    "Enter to proceed or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
-        if answer == "":
-            print("\nRunning AzCopy sync job (batt export)...")
-            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-            returncode = subprocess.call(["azcopy", "sync",
-                                                "--delete-destination", "true",
-                                DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
-            print(colorama.Style.RESET_ALL + "...done")
-        else:
-            print("Skipping sync from batt dir to shared folder.")
 
-    else:
-        print("Skipping AzCopy jobs (requires Windows system).")
+        # Sync to second remote (Azure blob)
+        if os.name=="nt":
+            # Controller exports
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            print("\nSync controller export dir to Azure blob? Enter to proceed, "
+                                            "'s' to skip, or 'q' to quit program.")
+            answer = input("> " + colorama.Style.RESET_ALL)
+            if answer == "":
+                print("\nRunning AzCopy sync job (controller exports)...")
+                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+                returncode = subprocess.call(["azcopy", "sync",
+                                                    "--delete-destination", "true",
+                                            DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
+                # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+                print(colorama.Style.RESET_ALL + "...done")
+            elif answer.lower() == "s":
+                print("Skipping sync from ctrl-export folder to shared folder.")
+            else:
+                # Accept anything other than a blank input as a quit command.
+                quit()
+
+            # Batt export dir
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            print("\nSync battery export dir from shared folder to Azure blob? "
+                                        "Enter to proceed or 'q' to quit program.")
+            answer = input("> " + colorama.Style.RESET_ALL)
+            if answer == "":
+                print("\nRunning AzCopy sync job (batt export)...")
+                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+                returncode = subprocess.call(["azcopy", "sync",
+                                                    "--delete-destination", "true",
+                                    DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
+                print(colorama.Style.RESET_ALL + "...done")
+            else:
+                print("Skipping sync from batt dir to shared folder.")
+
+        else:
+            print("Skipping AzCopy jobs (requires Windows system).")
