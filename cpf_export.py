@@ -454,7 +454,17 @@ def export_cpf_faults(target_dir, output_filename):
     if ERROR_HISTORY_SAVE_BUTTON_LOC is None:
         loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
         if loc_tuple is None:
-            raise Exception("Can't find Error History save button.")
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            print("\nCan't find Error History save button for (\"%s\").\n"
+                                "Empty fault history [Y/N]?" % output_filename)
+            answer = input("> " + colorama.Style.RESET_ALL)
+            if answer.upper() == "Y":
+                select_program("cpf")
+                gui.hotkey("ctrl", "f4") # Close CPF file.
+                return None
+            else:
+                # Accept anything other than a blank input or 'Y' as a No.
+                raise Exception("Can't find Error History save button.")
         else:
             ERROR_HISTORY_SAVE_BUTTON_LOC = loc_tuple # Update global variable.
     else:
@@ -490,7 +500,7 @@ def export_cpf_faults(target_dir, output_filename):
     export_path = os.path.join(target_dir, output_filename)
     if not os.path.exists(export_path):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        print("\nCan't confirm output file existence (\"%s\").\nEmpty fault history [Y/N]? " % output_filename)
+        print("\nCan't confirm output file existence (\"%s\").\nEmpty fault history [Y/N]?" % output_filename)
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer.upper() == "Y":
             select_program("cpf")
