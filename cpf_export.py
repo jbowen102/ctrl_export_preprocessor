@@ -21,6 +21,7 @@ if os.name == "nt":
 
 
 import fix_cpf_export_format as fixcpf
+from sw_rev_mapping import REV_MAP_ALL_F
 from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
@@ -349,8 +350,12 @@ def convert_file(cxf_path, target_dir, check_sn=False, gui_in_focus=False):
 
 def select_program(filetype):
     # Brings conversion program into focus.
-    answer = gui.confirm("Bring %s-conversion GUI into focus, make sure CAPSLOCK "
-                                    "is off, then click OK." % filetype.upper())
+    if filetype.upper() == "CDF":
+        proj_file_msg = "Check intended project file is loaded in CIT.\n"
+    else:
+        proj_file_msg = ""
+    answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
+                    "is off, then click OK." % (proj_file_msg, filetype.upper()))
     if answer == "OK":
         print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
                     "commencing (%s). Move mouse pointer to upper left of "
@@ -842,6 +847,7 @@ if __name__ == "__main__":
                                          "--exclude-path=tmp", "--recursive",
                                           DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
                 # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+                # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
                 print(colorama.Style.RESET_ALL + "...done")
             elif answer.lower() == "s":
                 print("Skipping sync from ctrl-export folder to shared folder.")
