@@ -740,6 +740,36 @@ def extract_cdf_source_sw_pn(export_filepath):
         return "G".join(vehicle_ctrl_sw_param.split(".")) # string
 
 
+def check_cprj_rev_match(cdf_export_path):
+    cdf_filename = os.path.basename(cdf_export_path)
+
+    cdf_cprj_pn = extract_cdf_cprj_pn(cdf_export_path)
+    cprj_map_rev = REV_MAP_ALL_F[cdf_cprj_pn]
+
+    cdf_source_ctrl_sw_pn = extract_cdf_source_sw_pn(cdf_export_path)
+    if cdf_source_ctrl_sw_pn is None:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
+                                            "mapping. Press Enter to continue."
+                                    % cdf_filename + colorama.Style.RESET_ALL)
+        return False
+    ctrl_sw_rev = REV_MAP_ALL_F[cdf_source_ctrl_sw_pn]
+
+    if cprj_map_rev != ctrl_sw_rev:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("SW mapping rev mismatch: %s in \"%s\" is rev %s, and project "
+                    "file is rev %s (%s).\nVCL Alias mapping likely invalid.\n"
+                "Press Enter to delete file and reprocess later w/ rev-%s cprj loaded in CIT."
+                % (cdf_source_ctrl_sw_pn, cdf_filename, ctrl_sw_rev,
+                                        cprj_map_rev, cdf_cprj_pn, ctrl_sw_rev)
+                                                    + colorama.Style.RESET_ALL)
+        os.remove(cdf_export_path)
+        # cprj_rev_dict[cprj_map_rev] = cdf_filename
+        return False
+    else:
+        return True
+
+
 def convert_all(file_type, source_dir, dest_dir, check_SNs=False):
     if not os.path.exists(source_dir):
         raise Exception("Can't find source_dir '%s'" % source_dir)
