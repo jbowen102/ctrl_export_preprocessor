@@ -40,6 +40,7 @@ DATE_REGEX = r"(20\d{2}[0-1]\d[0-3]\d)"
         # followed by either "0", "1", "2", or "3" paired with any digit (days 00-39)
 # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
 CDF_SW_PN_REGEX = r"\d{6}\.\d{2}|\d{8}\.\d{2}"
+SW_PN_REGEX = r"\d{6}G\d{2}|\d{8}G\d{2}"
 
 
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
@@ -661,6 +662,37 @@ def check_cdf_vehicle_sn(cdf_path):
         return False
     else:
         return True
+
+
+def extract_cdf_cprj_pn(export_filepath):
+    """Takes in CDF export (.xlsx format), locates the SW P/N associated with
+    the .cprj file that was loaded in CIT when the CDF was converted.
+    Returns cprj SW P/N as string.
+    """
+    worksheet_names = pd.ExcelFile(export_filepath).sheet_names
+    # https://stackoverflow.com/a/17977609
+
+    found = False
+    for sheet_name in worksheet_names:
+        prompt_str = ("Found multiple possible cprj SW P/Ns stored in CDF (%s) worksheet name '%s'.\n"
+                                                        "Press Enter to continue."
+                            % (os.path.basename(export_filepath), sheet_name))
+        # Find worksheet w/ P/N in the name
+        sw_pn = find_in_string(SW_PN_REGEX, sheet_name, prompt_str, allow_none=True)
+        if sw_pn is None:
+            continue
+        elif found:
+            # If a second tab name containing P/N is found, that violates an assumption that only one tab has it.
+            raise Exception("Found more than one tab in file '%s' w/ a name "
+                                    "including cprj SW P/N." % export_filepath)
+        else:
+            found = True
+            cprj_pn = sw_pn
+            continue # Look at rest of tabs to see if another exists w/ P/N, even though that isn't expected.
+
+    assert found, "No cprj SW P/N found in any tab in file '%s'." % export_filepath
+
+    return cprj_pn
 
 
 def extract_cdf_source_sw_pn(export_filepath):
