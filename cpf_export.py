@@ -39,6 +39,7 @@ DATE_REGEX = r"(20\d{2}[0-1]\d[0-3]\d)"
     # followed by either "0" or "1" and any digit (months)
         # followed by either "0", "1", "2", or "3" paired with any digit (days 00-39)
 # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
+CDF_SW_PN_REGEX = r"\d{6}\.\d{2}|\d{8}\.\d{2}"
 
 
 CDF_EXPORT_SUFFIX = "_CDF.xlsx"
@@ -592,14 +593,16 @@ def export_cdf(target_dir, output_filename, validate_sn):
 
 
 def extract_cdf_vehicle_sn(export_filepath):
+    cdf_variable_name = "nvuser4"
 
     param_df = pd.read_excel(export_filepath, sheet_name="Parameters")
     for _, row in param_df.iterrows():
-        if row["Variable Name"] == "nvuser4":
+        if row["Variable Name"] == cdf_variable_name:
             # Check if VCL Alias column available (old CIT versions don't include it.)
             if "VCL Alias" in param_df.columns:
-                error_text = ("Expected 'VCL Alias' of 'nvuser4' variable to be "
-                "'NV_VehicleSerialNumber', but instead is '%s'." % row["VCL Alias"])
+                error_text = ("Expected 'VCL Alias' of '%s' variable to be "
+                                "'NV_VehicleSerialNumber', but instead is '%s'."
+                                        % (cdf_variable_name, row["VCL Alias"]))
                 assert row["VCL Alias"] == "NV_VehicleSerialNumber", error_text
 
             vehicle_sn_param = row["Application Default"]
@@ -621,16 +624,16 @@ def extract_cdf_vehicle_sn(export_filepath):
     valid_sn = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
     if valid_sn is None:
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("Expected 'nvuser4' variable to contain S/N in 7-digit format starting "
+        input("Expected '%s' variable to contain S/N in 7-digit format starting "
                         "with 3, 5, or 8.\nFound '%s' in %s instead."
-                        % (vehicle_sn_param, os.path.basename(export_filepath))
+                    % (cdf_variable_name, vehicle_sn_param, os.path.basename(export_filepath))
                                                     + colorama.Style.RESET_ALL)
         return None
     elif valid_sn != vehicle_sn_param:
         print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("'nvuser4' value '%s' (in %s) appears to contain S/N with right format but "
+        input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
                         "may contain additional content."
-                        % (vehicle_sn_param, os.path.basename(export_filepath))
+                    % (cdf_variable_namevehicle_sn_param, os.path.basename(export_filepath))
                                                      + colorama.Style.RESET_ALL)
         return None
     else:
@@ -658,6 +661,51 @@ def check_cdf_vehicle_sn(cdf_path):
         return False
     else:
         return True
+
+
+def extract_cdf_source_sw_pn(export_filepath):
+    """Takes in CDF export (.xlsx format), locates source-vehicle's
+    controller-software P/N, and returns it as a string.
+    """
+    cdf_variable_name = "user119"
+    param_df = pd.read_excel(export_filepath, sheet_name="Parameters")
+    for _, row in param_df.iterrows():
+        if row["Variable Name"] == cdf_variable_name:
+            # Check if VCL Alias column available (old CIT versions don't include it.)
+            if "VCL Alias" in param_df.columns:
+                error_text = ("Expected 'VCL Alias' of '%s' variable to be "
+                                "'ApplicationNameAsInt32', but instead is '%s'."
+                                        % (cdf_variable_name, row["VCL Alias"]))
+                assert row["VCL Alias"] == "ApplicationNameAsInt32", error_text
+
+            vehicle_ctrl_sw_param = row["Application Default"]
+
+    if not vehicle_ctrl_sw_param or pd.isna(vehicle_ctrl_sw_param):
+        # Empty value
+        return None
+
+    # Validate that SW P/N value conforms to expected format.
+    prompt_str = ("Found multiple possible ctrl SW P/Ns stored in CDF '%s': '%s'.\n"
+                                                    "Press Enter to continue."
+                    % (os.path.basename(export_filepath), vehicle_ctrl_sw_param))
+    valid_sw_pn = find_in_string(CDF_SW_PN_REGEX, vehicle_ctrl_sw_param, prompt_str, allow_none=True)
+    if valid_sw_pn is None:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("Expected '%s' variable to contain SW P/N in ########.## format."
+                                                  "\nFound '%s' in %s instead."
+                                    % (cdf_variable_name, vehicle_ctrl_sw_param,
+                    os.path.basename(export_filepath)) + colorama.Style.RESET_ALL)
+        return None
+    elif valid_sw_pn != vehicle_ctrl_sw_param:
+        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
+                                    "format but may contain additional content."
+                % (cdf_variable_name, vehicle_ctrl_sw_param, os.path.basename(export_filepath))
+                                                     + colorama.Style.RESET_ALL)
+        return None
+    else:
+        # Replace period with "G" in SW P/N string and return
+        return "G".join(vehicle_ctrl_sw_param.split(".")) # string
 
 
 def convert_all(file_type, source_dir, dest_dir, check_SNs=False):
