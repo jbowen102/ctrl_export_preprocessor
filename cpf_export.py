@@ -12,11 +12,10 @@ from xlsxwriter.workbook import Workbook
 import xlwings as xw
 import openpyxl as pyxl
 if os.name == "nt":
-    # Allows me to test other (non-GUI) features in WSL where pyautogui import fails
+    # Allows testing other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
     gui.FAILSAFE = True
     # Allows moving mouse to upper-left corner of screen to abort execution.
-    gui.PAUSE = 0.5 # 500 ms pause after each command.
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
@@ -50,8 +49,6 @@ CPF_COMBINED_EXPORT_SUFFIX = "_cpf.xlsx"
 
 ERROR_HISTORY_SAVE_BUTTON_LOC = None # Will be modified below
 
-GUI_PAUSE_MULT = 1.0 # Extend or reduce pauses between GUI commands
-
 
 class UserCancel(Exception):
     pass
@@ -63,6 +60,7 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
     date_target=True adds date validation.
     """
     found = None # Initialize variable for loop
+    prompted = False
     while not found:
         matches = re.findall(regex_pattern, string_to_search, flags=re.IGNORECASE)
         if len(matches) == 1 and date_target:
@@ -75,15 +73,16 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
                 pass
             else:
                 # Valid date
-                return matches[0]
+                return matches[0], prompted
         elif len(matches) == 1:
-            return matches[0]
+            return matches[0], prompted
             # loop exits
         elif len(matches) == 0 and allow_none:
             # print("\t\t%s: no matches; returning None" % string_to_search) # DEBUG
-            return None
+            return None, prompted
 
         # No matches, multiple matches, or invalid date found:
+        prompted = True
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
         string_to_search = input(">" + colorama.Style.RESET_ALL)
 
@@ -114,7 +113,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                     prompt_str = "Can't parse S/N from import filename \"%s\".\n" \
                                                     "Type S/N manually: " % file_name
                     # print("\n\tS/N:") # DEBUG
-                    serial_num = find_in_string(SN_REGEX, item_name, prompt_str)
+                    serial_num, _ = find_in_string(SN_REGEX, item_name, prompt_str)
                     # Now look for date in remaining string. Will add later if not present.
                     # print("\tReceived %s as S/N back from find_in_string()" % serial_num) # DEBUG
                     remaining_str = item_name.split(serial_num)
@@ -124,7 +123,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                                                             "filename \"%s\".\n" \
                                 "Type manually (YYYYMMDD format): " % file_name
                         # print("\tDate:") # DEBUG
-                        date_match = find_in_string(DATE_REGEX, substring,
+                        date_match, _ = find_in_string(DATE_REGEX, substring,
                                     prompt_str, date_target=True, allow_none=True)
                         # print("\tReceived %s as date back from find_in_string()" % date_match) # DEBUG
 
@@ -286,76 +285,60 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         print("Skipping import-dir update from remote.\n")
 
 
-def convert_file(cxf_path, target_dir, check_sn=False, gui_in_focus=False):
+def convert_file(cpf_path, target_dir, check_sn=False, gui_in_focus=False):
     """
-    Converts either a CPF or CDF to Excel format.
-    temp_dir path only required for processing CPFs.
+    Converts a CPF to Excel format.
+    temp_dir path required for processing CPFs.
     check_sn indicates whether to validate vehicle S/N in filename.
     """
-    if not os.path.exists(cxf_path):
-        raise Exception("Can't find src file '%s'" % cxf_path)
+    if not os.path.exists(cpf_path):
+        raise Exception("Can't find src file '%s'" % cpf_path)
     if not os.path.exists(target_dir):
         raise Exception("Can't find target_dir '%s'" % target_dir)
 
-    file_type = os.path.splitext(cxf_path)[-1]
-    cxf_name = os.path.basename(cxf_path)
+    file_type = os.path.splitext(cpf_path)[-1]
+    cpf_name = os.path.basename(cpf_path)
 
     temp_dir = os.path.join(target_dir, "tmp")
     if not os.path.exists(temp_dir):
         os.mkdir(temp_dir) # Will leave in place after processing finished.
 
     if not gui_in_focus:
-        select_program(os.path.splitext(cxf_path)[-1][1:])
+        select_program(os.path.splitext(cpf_path)[-1][1:])
 
-    if file_type.lower() == ".cpf":
-        cpf_open = False
-        # Open CPF in GUI and export parameters if export doesn't exist already.
-        cpf_param_export_filename = os.path.splitext(cxf_name)[0] + CPF_PARAM_EXPORT_SUFFIX
-        if not os.path.exists(os.path.join(temp_dir, cpf_param_export_filename)):
-            cpf_open = open_cpf(cxf_path)
-            cpf_params_path = export_cpf_params(temp_dir, cpf_param_export_filename,
-                                                            validate_sn=check_sn)
-        else:
-            cpf_params_path = os.path.join(temp_dir, cpf_param_export_filename)
+    cpf_open = False
+    # Open CPF in GUI and export parameters if export doesn't exist already.
+    cpf_param_export_filename = os.path.splitext(cpf_name)[0] + CPF_PARAM_EXPORT_SUFFIX
+    if not os.path.exists(os.path.join(temp_dir, cpf_param_export_filename)):
+        cpf_open = open_cpf(cpf_path)
+        cpf_params_path = export_cpf_params(temp_dir, cpf_param_export_filename,
+                                                        validate_sn=check_sn)
+    else:
+        cpf_params_path = os.path.join(temp_dir, cpf_param_export_filename)
 
-        # Open CPF in GUI and export faults if export doesn't exist already.
-        cpf_fault_export_filename = os.path.splitext(cxf_name)[0] + CPF_FAULT_EXPORT_SUFFIX
-        if not os.path.exists(os.path.join(temp_dir, cpf_fault_export_filename)):
-            if not cpf_open:
-                cpf_open = open_cpf(cxf_path)
+    # Open CPF in GUI and export faults if export doesn't exist already.
+    cpf_fault_export_filename = os.path.splitext(cpf_name)[0] + CPF_FAULT_EXPORT_SUFFIX
+    if not os.path.exists(os.path.join(temp_dir, cpf_fault_export_filename)):
+        if not cpf_open:
+            cpf_open = open_cpf(cpf_path)
 
-            # Export faults
-            cpf_faults_path = export_cpf_faults(temp_dir, cpf_fault_export_filename)
+        # Export faults
+        cpf_faults_path = export_cpf_faults(temp_dir, cpf_fault_export_filename)
 
-        else:
-            # If it already exists in temp dir from previous processing.
-            cpf_faults_path = os.path.join(temp_dir, cpf_fault_export_filename)
+    else:
+        # If it already exists in temp dir from previous processing.
+        cpf_faults_path = os.path.join(temp_dir, cpf_fault_export_filename)
 
-        # Combine both tsvs to single export file.
-        cpf_combined_export_filename = os.path.splitext(cxf_name)[0] + CPF_COMBINED_EXPORT_SUFFIX
-        cpf_combined_export_path = os.path.join(target_dir, cpf_combined_export_filename)
-        fixcpf.combine_param_and_fault_export(cpf_params_path, cpf_faults_path, cpf_combined_export_path)
-        return True
-
-    elif file_type.lower() == ".cdf":
-        valid_cdf = open_cdf(cxf_path)
-
-        if valid_cdf:
-            cdf_export_filename = os.path.splitext(cxf_name)[0] + CDF_EXPORT_SUFFIX
-            export_path = export_cdf(target_dir, cdf_export_filename, validate_sn=check_sn)
-            # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
-            return True
-        else:
-            print("\n\tSkipping %s (empty file)." % os.path.basename(cxf_path))
-            return False
+    # Combine both tsvs to single export file.
+    cpf_combined_export_filename = os.path.splitext(cpf_name)[0] + CPF_COMBINED_EXPORT_SUFFIX
+    cpf_combined_export_path = os.path.join(target_dir, cpf_combined_export_filename)
+    fixcpf.combine_param_and_fault_export(cpf_params_path, cpf_faults_path, cpf_combined_export_path)
+    return True
 
 
 def select_program(filetype):
     # Brings conversion program into focus.
-    if filetype.upper() == "CDF":
-        proj_file_msg = "Check intended project file is loaded in CIT.\n"
-    else:
-        proj_file_msg = ""
+    proj_file_msg = ""
     answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
                     "is off, then click OK." % (proj_file_msg, filetype.upper()))
     if answer == "OK":
@@ -423,7 +406,7 @@ def check_cpf_vehicle_sn(cpf_param_path):
     vehicle_sn_stored = fixcpf.parse_cpf_vehicle_sn(cpf_param_path)
     prompt_str = "Can\'t parse S/N from cpf_param_filename \"%s\".\n" \
                                                 "Type S/N manually: " % cpf_param_filename
-    vehicle_sn_from_filename = find_in_string(SN_REGEX, cpf_param_filename, prompt_str)
+    vehicle_sn_from_filename, _ = find_in_string(SN_REGEX, cpf_param_filename, prompt_str)
     # print("%s\tfrom filename." % vehicle_sn_from_filename) # DEBUG
     # print("%s\tstored in CPF." % vehicle_sn_stored) # DEBUG
 
@@ -522,255 +505,462 @@ def export_cpf_faults(target_dir, output_filename):
     return export_path
 
 
-def open_cdf(file_path):
-    if not os.path.exists(file_path):
-        raise Exception("Can't find file_path '%s'" % file_path)
+class GUI_Driver(object):
+    def __init__(self):
+        self.gui_in_focus = False
 
-    # Assumes CIT program already in focus.
-    # Ensure file is nonzero size. CIT gives error window for empty file.
-    if not os.path.getsize(file_path):
-        # Skip empty file
-        return False
+    def gui_is_in_focus(self):
+        return self.gui_in_focus
 
-    # Assumes CIT project open and Programmer window open, in focus.
-    # Import file
-    gui.press(["alt"])
-    gui.press(["f"])
-    gui.press(["i"])
-    gui.press(["c"])
+    def lose_focus(self):
+        self.gui_in_focus = True
 
-    gui.press(["enter"]) # Confirm node to use.
-
-    gui.hotkey("ctrl", "l") # Select address bar
-    gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
-    gui.press(["enter"])
-
-    gui.hotkey("alt", "n") # Select filename field
-    gui.typewrite(os.path.basename(file_path))
-    gui.press(["enter"]) # Confirm filename to open.
-    time.sleep(1 * GUI_PAUSE_MULT) # Allow time for file to open.
-
-    return True
-
-
-def export_cdf(target_dir, output_filename, validate_sn):
-    if not os.path.exists(target_dir):
-        raise Exception("Can't find target_dir '%s'" % target_dir)
-
-    # Assumes CIT project open and Programmer window open, in focus.
-    # Export spreadsheet
-    gui.press(["alt"])
-    gui.press(["f"])
-    gui.press(["e"])
-    gui.press(["s"])
-
-    gui.hotkey("alt", "n") # Select filename field
-    gui.typewrite(output_filename)
-
-    gui.hotkey("ctrl", "l") # Select address bar
-    gui.typewrite(target_dir) # Navigate to target export folder.
-    gui.press(["enter"])
-    gui.hotkey("alt", "s") # Save
-    time.sleep(0.75 * GUI_PAUSE_MULT)
-
-    gui.press(["enter"]) # Click through error
-
-    time.sleep(20 * GUI_PAUSE_MULT) # Allow time for it to write and open Excel file.
-    # CIT opens .xlsx export automatically.
-    # Close export (doesn't always work):
-    export_path = os.path.join(target_dir, output_filename)
-    book = xw.Book(export_path)
-    book.close()
-
-    if validate_sn:
-        match = check_cdf_vehicle_sn(export_path)
-        if not match:
-            # check_cdf_vehicle_sn() may prompt user to ack. Re-focus CDF program after.
-            select_program("cdf")
-
-    # Re-focus on CIT.
-    gui.click(1477, 17) # Temporary workaround to click title bar of CIT.
-    return os.path.join(target_dir, output_filename)
-
-
-def extract_cdf_vehicle_sn(export_filepath):
-    cdf_variable_name = "nvuser4"
-
-    param_df = pd.read_excel(export_filepath, sheet_name="Parameters")
-    for _, row in param_df.iterrows():
-        if row["Variable Name"] == cdf_variable_name:
-            # Check if VCL Alias column available (old CIT versions don't include it.)
-            if "VCL Alias" in param_df.columns:
-                error_text = ("Expected 'VCL Alias' of '%s' variable to be "
-                                "'NV_VehicleSerialNumber', but instead is '%s'."
-                                        % (cdf_variable_name, row["VCL Alias"]))
-                assert row["VCL Alias"] == "NV_VehicleSerialNumber", error_text
-
-            vehicle_sn_param = row["Application Default"]
-
-    if not vehicle_sn_param or pd.isna(vehicle_sn_param):
-        # Empty value
-        return None
-    elif vehicle_sn_param.isdecimal() and hex(int(vehicle_sn_param)) == "0xffffffff":
-        # If vehicle S/N was not written to controller, S/N value in CDF export
-        # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
-        # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
-                % (hex(int(vehicle_sn_param)), os.path.basename(export_filepath)) + colorama.Style.RESET_ALL)
-        return None
-
-    # Validate that S/N value conforms to expected format.
-    prompt_str = ("Found multiple possible S/N values stored in CDF: '%s'. Press Enter to continue." % vehicle_sn_param)
-    valid_sn = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
-    if valid_sn is None:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("Expected '%s' variable to contain S/N in 7-digit format starting "
-                        "with 3, 5, or 8.\nFound '%s' in %s instead."
-                    % (cdf_variable_name, vehicle_sn_param, os.path.basename(export_filepath))
-                                                    + colorama.Style.RESET_ALL)
-        return None
-    elif valid_sn != vehicle_sn_param:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
-                        "may contain additional content."
-                    % (cdf_variable_namevehicle_sn_param, os.path.basename(export_filepath))
-                                                     + colorama.Style.RESET_ALL)
-        return None
-    else:
-        return vehicle_sn_param # string
-
-
-def check_cdf_vehicle_sn(cdf_path):
-    cdf_filename = os.path.basename(cdf_path)
-
-    vehicle_sn_stored = extract_cdf_vehicle_sn(cdf_path)
-
-    prompt_str = "Can\'t parse S/N from cdf_filename \"%s\".\n" \
-                                                "Type S/N manually: " % cdf_filename
-    vehicle_sn_from_filename = find_in_string(SN_REGEX, cdf_filename, prompt_str)
-
-    if vehicle_sn_stored is None:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("No valid S/N found in \"%s\". Press Enter to continue." % cdf_filename + colorama.Style.RESET_ALL)
-        return False
-    elif vehicle_sn_stored != vehicle_sn_from_filename:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
-                                "(import and export).\nPress Enter to continue."
-                % (vehicle_sn_stored, cdf_filename) + colorama.Style.RESET_ALL)
-        return False
-    else:
-        return True
-
-
-def extract_cdf_cprj_pn(export_filepath):
-    """Takes in CDF export (.xlsx format), locates the SW P/N associated with
-    the .cprj file that was loaded in CIT when the CDF was converted.
-    Returns cprj SW P/N as string.
-    """
-    worksheet_names = pd.ExcelFile(export_filepath).sheet_names
-    # https://stackoverflow.com/a/17977609
-
-    found = False
-    for sheet_name in worksheet_names:
-        prompt_str = ("Found multiple possible cprj SW P/Ns stored in CDF (%s) worksheet name '%s'.\n"
-                                                        "Press Enter to continue."
-                            % (os.path.basename(export_filepath), sheet_name))
-        # Find worksheet w/ P/N in the name
-        sw_pn = find_in_string(SW_PN_REGEX, sheet_name, prompt_str, allow_none=True)
-        if sw_pn is None:
-            continue
-        elif found:
-            # If a second tab name containing P/N is found, that violates an assumption that only one tab has it.
-            raise Exception("Found more than one tab in file '%s' w/ a name "
-                                    "including cprj SW P/N." % export_filepath)
+    def select_program(self, filetype):
+        # Brings conversion program into focus.
+        if filetype.upper() == "CDF":
+            proj_file_msg = "Check intended project file is loaded in CIT.\n"
         else:
-            found = True
-            cprj_pn = sw_pn
-            continue # Look at rest of tabs to see if another exists w/ P/N, even though that isn't expected.
+            proj_file_msg = ""
+        answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
+                        "is off, then click OK." % (proj_file_msg, filetype.upper()))
+        if answer == "OK":
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
+                        "commencing (%s). Move mouse pointer to upper left of "
+                        "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
+            self.gui_in_focus = True
+        else:
+            self.gui_in_focus = False
+            raise UserCancel()
 
-    assert found, "No cprj SW P/N found in any tab in file '%s'." % export_filepath
+    def open_cdf(self, file_path):
+        if not os.path.exists(file_path):
+            raise Exception("Can't find file_path '%s'" % file_path)
 
-    return cprj_pn
+        # Ensure file size is nonzero. CIT gives error window for empty file.
+        if not os.path.getsize(file_path):
+            # Skip empty file
+            return False
 
+        # Requires CIT project open and Programmer window open, in focus.
+        if not self.gui_in_focus:
+            self.select_program("CDF")
 
-def extract_cdf_source_sw_pn(export_filepath):
-    """Takes in CDF export (.xlsx format), locates source-vehicle's
-    controller-software P/N, and returns it as a string.
-    """
-    cdf_variable_name = "user119"
-    param_df = pd.read_excel(export_filepath, sheet_name="Parameters")
-    for _, row in param_df.iterrows():
-        if row["Variable Name"] == cdf_variable_name:
-            # Check if VCL Alias column available (old CIT versions don't include it.)
-            if "VCL Alias" in param_df.columns:
-                error_text = ("Expected 'VCL Alias' of '%s' variable to be "
-                                "'ApplicationNameAsInt32', but instead is '%s'."
-                                        % (cdf_variable_name, row["VCL Alias"]))
-                assert row["VCL Alias"] == "ApplicationNameAsInt32", error_text
+        # Import file
+        gui.press(["alt"])
+        gui.press(["f"])
+        gui.press(["i"])
+        gui.press(["c"])
 
-            vehicle_ctrl_sw_param = row["Application Default"]
+        gui.press(["enter"]) # Confirm node to use.
 
-    if not vehicle_ctrl_sw_param or pd.isna(vehicle_ctrl_sw_param):
-        # Empty value
-        return None
+        gui.hotkey("ctrl", "l") # Select address bar
+        gui.typewrite(os.path.dirname(file_path)) # Navigate to import folder.
+        gui.press(["enter"])
 
-    # Validate that SW P/N value conforms to expected format.
-    prompt_str = ("Found multiple possible ctrl SW P/Ns stored in CDF '%s': '%s'.\n"
-                                                    "Press Enter to continue."
-                    % (os.path.basename(export_filepath), vehicle_ctrl_sw_param))
-    valid_sw_pn = find_in_string(CDF_SW_PN_REGEX, vehicle_ctrl_sw_param, prompt_str, allow_none=True)
-    if valid_sw_pn is None:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("Expected '%s' variable to contain SW P/N in ########.## format."
-                                                  "\nFound '%s' in %s instead."
-                                    % (cdf_variable_name, vehicle_ctrl_sw_param,
-                    os.path.basename(export_filepath)) + colorama.Style.RESET_ALL)
-        return None
-    elif valid_sw_pn != vehicle_ctrl_sw_param:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
-                                    "format but may contain additional content."
-                % (cdf_variable_name, vehicle_ctrl_sw_param, os.path.basename(export_filepath))
-                                                     + colorama.Style.RESET_ALL)
-        return None
-    else:
-        # Replace period with "G" in SW P/N string and return
-        return "G".join(vehicle_ctrl_sw_param.split(".")) # string
+        gui.hotkey("alt", "n") # Select filename field
+        gui.typewrite(os.path.basename(file_path))
+        gui.press(["enter"]) # Confirm filename to open.
+        time.sleep(1 * GUI_PAUSE_MULT) # Allow time for file to open.
 
-
-def check_cprj_rev_match(cdf_export_path):
-    cdf_filename = os.path.basename(cdf_export_path)
-
-    cdf_cprj_pn = extract_cdf_cprj_pn(cdf_export_path)
-    cprj_map_rev = REV_MAP_ALL_F[cdf_cprj_pn]
-
-    cdf_source_ctrl_sw_pn = extract_cdf_source_sw_pn(cdf_export_path)
-    if cdf_source_ctrl_sw_pn is None:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
-                                            "mapping. Press Enter to continue."
-                                    % cdf_filename + colorama.Style.RESET_ALL)
-        return False
-    ctrl_sw_rev = REV_MAP_ALL_F[cdf_source_ctrl_sw_pn]
-
-    if cprj_map_rev != ctrl_sw_rev:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("SW mapping rev mismatch: %s in \"%s\" is rev %s, and project "
-                    "file is rev %s (%s).\nVCL Alias mapping likely invalid.\n"
-                "Press Enter to delete file and reprocess later w/ rev-%s cprj loaded in CIT."
-                % (cdf_source_ctrl_sw_pn, cdf_filename, ctrl_sw_rev,
-                                        cprj_map_rev, cdf_cprj_pn, ctrl_sw_rev)
-                                                    + colorama.Style.RESET_ALL)
-        os.remove(cdf_export_path)
-        # cprj_rev_dict[cprj_map_rev] = cdf_filename
-        return False
-    else:
         return True
 
 
-def convert_all(file_type, source_dir, dest_dir, check_SNs=False):
+    def export_cdf(self, output_filepath):
+        target_dir = os.path.dirname(output_filepath)
+        output_filename = os.path.basename(output_filepath)
+
+        if not os.path.exists(target_dir):
+            raise Exception("Can't find target_dir '%s'" % target_dir)
+
+        # Requires CIT project open and Programmer window open, in focus.
+        if not self.gui_in_focus:
+            self.select_program("CDF")
+
+        # Export spreadsheet
+        gui.press(["alt"])
+        gui.press(["f"])
+        gui.press(["e"])
+        gui.press(["s"])
+
+        gui.hotkey("alt", "n") # Select filename field
+        gui.typewrite(output_filename)
+
+        gui.hotkey("ctrl", "l") # Select address bar
+        gui.typewrite(target_dir) # Navigate to target export folder.
+        gui.press(["enter"])
+        gui.hotkey("alt", "s") # Save
+        time.sleep(0.75 * GUI_PAUSE_MULT)
+
+        gui.press(["enter"]) # Click through error
+
+        time.sleep(20 * GUI_PAUSE_MULT) # Allow time for it to write and open Excel file.
+        # CIT opens .xlsx export automatically.
+        # Close export (doesn't always work):
+        book = xw.Book(output_filepath)
+        book.close()
+
+        # Re-focus on CIT.
+        # Excel behavior inconsistent.
+        # Closing workbook above often leaves a blank instance of Excel anyway.
+        # Click title bar of CIT to bring back in focus.
+        # Snap CIT to right half of screen and make sure Excel window isn't full-screen.
+        gui.click(1477, 17)
+
+
+class CloneDataFile(object):
+    def __init__(self, source_filepath):
+        assert os.path.exists(source_filepath), "Tried to create CDF object w/ invalid filepath: %s" % import_filepath
+        self.import_filepath = source_filepath
+        self.cdf_filename = os.path.basename(source_filepath)
+        self.export_filename = os.path.splitext(self.cdf_filename)[0] + CDF_EXPORT_SUFFIX # Usually doesn't exist yet.
+        self.export_path = None       # To be set by convert()
+
+        self.valid_cdf = False        # Some CDFs are empty. To be determined by GUI in convert()
+
+        self.source_ctrl_sw_pn = None # To be set by extract_cdf_source_sw_pn()
+
+        self.vehicle_sn_param = None  # Vehicle S/N stored in controller. Various failure modes can couse this to be wrong.
+        self.vehicle_sn = None        # Canonical vehicle S/N after validation. Still may be none if impossible to confidently infer.
+
+        self.GUI_driver_in_use = None # To be set by convert()
+
+    def is_valid_cdf(self):
+        return self.valid_cdf
+
+    def get_cdf_filename(self):
+        return self.cdf_filename
+
+    def get_ctrl_sw_rev(self):
+        assert self.source_ctrl_sw_pn is not None, "Tried to get %s's ctrl_sw_rev, but it hasn't been set yet" % self.cdf_filename
+        return REV_MAP_ALL_F[self.source_ctrl_sw_pn]
+
+    def has_export(self, export_dir=None):
+        """Returns True iff CDF object already has a stored, valid filepath in export_path attribute
+        or if export_filename exists in given export_dir.
+        """
+        if self.export_path is None and export_dir is None:
+            return False
+        if self.export_path is None:
+            return os.path.exists(os.path.join(export_dir, self.export_filename))
+        elif os.path.exists(self.export_path):
+            return True
+        else:
+            return False # path string stored, but nothing written there yet.
+
+    def convert(self, GUIProgDriver, target_dir,  check_sn=False):
+        """
+        Converts a CDF to Excel format.
+        check_sn indicates whether to validate vehicle S/N in filename.
+        """
+        if not os.path.exists(target_dir):
+            raise Exception("Can't find target_dir '%s'" % target_dir)
+
+        self.temp_dir = os.path.join(target_dir, "tmp")
+        if not os.path.exists(self.temp_dir):
+            os.mkdir(self.temp_dir) # Will leave in place after processing finished.
+
+        self.export_path = os.path.join(target_dir, self.export_filename)
+        # See if export exists there already
+        assert not self.has_export(), "Tried to process file %s that already has export at %s" % (self.cdf_filename, self.export_path)
+
+        self.GUI_Driver_in_use = GUIProgDriver
+        self.valid_cdf = self.GUI_Driver_in_use.open_cdf(self.import_filepath)
+        if self.valid_cdf:
+            self.GUI_Driver_in_use.export_cdf(self.export_path)
+            # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
+        else:
+            print("\n\tSkipping %s (empty file)." % os.path.basename(cdf_path))
+            return False
+
+        self.check_stored_vehicle_sn()
+
+        valid_alias_mapping = self.check_cprj_rev_match()
+        if not valid_alias_mapping:
+            os.remove(self.export_path)
+            return False
+
+        return True
+
+    def check_stored_vehicle_sn(self):
+        assert self.has_export(), "Tried to extract vehicle S/N from CDF export, but export doesn't exist.\n\t%s" % self
+
+        prompt_str = "Can\'t parse S/N from cdf_filename \"%s\".\n" \
+                                                    "Type S/N manually: " % self.cdf_filename
+        vehicle_sn_from_filename, stole_focus = find_in_string(SN_REGEX, self.cdf_filename, prompt_str)
+        if stole_focus:
+            GUI_driver_in_use.lose_focus()
+
+        self.extract_stored_vehicle_sn() # Populates self.vehicle_sn_param
+        if self.vehicle_sn_param is None:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("No valid S/N found in \"%s\". Press Enter to continue." % self.cdf_filename + colorama.Style.RESET_ALL)
+        elif self.vehicle_sn_param != vehicle_sn_from_filename:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
+                                    "(import and export).\nPress Enter to continue."
+                    % (self.vehicle_sn_param, self.cdf_filename) + colorama.Style.RESET_ALL)
+            # TODO: prompt user - should self.vehicle_sn should be set to vehicle_sn_from_filename in this case?
+        else:
+            self.vehicle_sn = self.vehicle_sn_param
+
+    def extract_stored_vehicle_sn(self):
+        CDF_VARIABLE_NAME = "nvuser4"
+
+        assert self.has_export(), "Tried to extract vehicle S/N from CDF export, but export doesn't exist.\n\t%s" % self
+
+        # vehicle S/N in export file
+        param_df = pd.read_excel(self.export_path, sheet_name="Parameters")
+        for _, row in param_df.iterrows():
+            if row["Variable Name"] == CDF_VARIABLE_NAME:
+                # Check if VCL Alias column available (old CIT versions don't include it.)
+                if "VCL Alias" in param_df.columns:
+                    error_text = ("Expected 'VCL Alias' of '%s' variable to be "
+                                    "'NV_VehicleSerialNumber', but instead is '%s'."
+                                            % (CDF_VARIABLE_NAME, row["VCL Alias"]))
+                    assert row["VCL Alias"].lower() == "nv_vehicleserialnumber", error_text
+
+                vehicle_sn_param = row["Application Default"]
+
+        if not vehicle_sn_param or pd.isna(vehicle_sn_param):
+            # Empty value
+            self.vehicle_sn_param = None
+            return
+        elif vehicle_sn_param.isdecimal() and hex(int(vehicle_sn_param)) == "0xffffffff":
+            # If vehicle S/N was not written to controller, S/N value in CDF export
+            # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
+            # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
+                    % (hex(int(vehicle_sn_param)), self.export_filename) + colorama.Style.RESET_ALL)
+            self.vehicle_sn_param = None
+            return
+
+        # Validate that S/N value conforms to expected format.
+        prompt_str = ("Found multiple possible S/N values stored in CDF: '%s'. Press Enter to continue." % vehicle_sn_param)
+        valid_sn, stole_focus = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
+        if stole_focus:
+            GUI_driver_in_use.lose_focus()
+
+        if valid_sn is None:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("Expected '%s' variable to contain S/N in 7-digit format starting "
+                            "with 3, 5, or 8.\nFound '%s' in %s instead."
+                        % (CDF_VARIABLE_NAME, vehicle_sn_param, self.export_filename)
+                                                        + colorama.Style.RESET_ALL)
+            self.vehicle_sn_param = None
+        elif valid_sn != vehicle_sn_param:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
+                            "may contain additional content."
+                        % (CDF_VARIABLE_NAME, vehicle_sn_param, self.export_filename)
+                                                        + colorama.Style.RESET_ALL)
+            self.vehicle_sn_param = None
+        else:
+            self.vehicle_sn_param = vehicle_sn_param # string
+
+    def check_cprj_rev_match(self):
+        cdf_cprj_pn = self.extract_cdf_cprj_pn()
+        cprj_map_rev = REV_MAP_ALL_F[cdf_cprj_pn]
+
+        self.extract_cdf_source_sw_pn()
+
+        if self.source_ctrl_sw_pn is None:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
+                                                "mapping. Press Enter to continue."
+                                        % self.cdf_filename + colorama.Style.RESET_ALL)
+            return False
+            # TODO - implement other means of inferring vehicle's SW rev automatically or w/ user input.
+
+        ctrl_sw_rev = REV_MAP_ALL_F[self.source_ctrl_sw_pn]
+        if cprj_map_rev != ctrl_sw_rev:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("SW mapping rev mismatch: %s in \"%s\" is rev %s, but project "
+                        "file \"%s\" is rev %s.\nVCL Alias mapping likely invalid.\n"
+                    "Will delete file and reprocess later w/ rev-%s cprj loaded in CIT."
+                     % (self.source_ctrl_sw_pn, self.cdf_filename, ctrl_sw_rev,
+                                         cdf_cprj_pn, cprj_map_rev, ctrl_sw_rev)
+                                                     + colorama.Style.RESET_ALL)
+            # Caller will delete file.
+            return False
+        else:
+            return True
+
+    def extract_cdf_source_sw_pn(self):
+        """Takes in CDF export (.xlsx format), locates source-vehicle's
+        controller-software P/N, and returns it as a string.
+        """
+        VSN_CDF_VAR_NAME = "user119"
+        param_df = pd.read_excel(self.export_path, sheet_name="Parameters")
+        for _, row in param_df.iterrows():
+            if row["Variable Name"] == VSN_CDF_VAR_NAME:
+                # Check if VCL Alias column available (old CIT versions don't include it.)
+                if "VCL Alias" in param_df.columns:
+                    error_text = ("Expected 'VCL Alias' of '%s' variable to be "
+                                    "'ApplicationNameAsInt32', but instead is '%s'."
+                                            % (VSN_CDF_VAR_NAME, row["VCL Alias"]))
+                    assert row["VCL Alias"].lower() == "applicationnameasint32", error_text
+
+                vehicle_ctrl_sw_param = row["Application Default"]
+
+        if not vehicle_ctrl_sw_param or pd.isna(vehicle_ctrl_sw_param):
+            # Empty value
+            self.source_ctrl_sw_pn = None
+            return
+
+        # Validate that SW P/N value conforms to expected format.
+        prompt_str = ("Found multiple possible ctrl SW P/Ns stored in CDF '%s': '%s'.\n"
+                                                        "Press Enter to continue."
+                        % (self.export_filename, vehicle_ctrl_sw_param))
+        valid_sw_pn, stole_focus = find_in_string(CDF_SW_PN_REGEX, vehicle_ctrl_sw_param, prompt_str, allow_none=True)
+        if stole_focus:
+            GUI_driver_in_use.lose_focus()
+
+        if valid_sw_pn is None:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("Expected '%s' variable to contain SW P/N in ########.## format."
+                                                    "\nFound '%s' in %s instead."
+                                        % (VSN_CDF_VAR_NAME, vehicle_ctrl_sw_param,
+                        self.export_filename) + colorama.Style.RESET_ALL)
+            self.source_ctrl_sw_pn = None
+        elif valid_sw_pn != vehicle_ctrl_sw_param:
+            GUI_driver_in_use.lose_focus()
+            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
+                                        "format but may contain additional content."
+                    % (VSN_CDF_VAR_NAME, vehicle_ctrl_sw_param, self.export_filename)
+                                                        + colorama.Style.RESET_ALL)
+            self.source_ctrl_sw_pn = None
+        else:
+            # Replace period with "G" in SW P/N string and return
+            self.source_ctrl_sw_pn = "G".join(vehicle_ctrl_sw_param.split(".")) # string
+
+    def extract_cdf_cprj_pn(self):
+        """Takes in CDF export (.xlsx format), locates the SW P/N associated with
+        the .cprj file that was loaded in CIT when the CDF was converted.
+        Returns cprj SW P/N as string.
+        """
+        worksheet_names = pd.ExcelFile(self.export_path).sheet_names
+        # https://stackoverflow.com/a/17977609
+
+        found = False
+        for sheet_name in worksheet_names:
+            prompt_str = ("Found multiple possible cprj SW P/Ns stored in CDF (%s) worksheet name '%s'.\n"
+                                                            "Press Enter to continue."
+                                % (self.export_filename, sheet_name))
+            # Find worksheet w/ P/N in the name
+            sw_pn, stole_focus = find_in_string(SW_PN_REGEX, sheet_name, prompt_str, allow_none=True)
+            if stole_focus:
+                GUI_driver_in_use.lose_focus()
+
+            if sw_pn is None:
+                continue
+            elif found:
+                # If a second tab name containing P/N is found, that violates an assumption that only one tab has it.
+                raise Exception("Found more than one tab in file '%s' w/ a name "
+                                        "including cprj SW P/N." % self.export_path)
+            else:
+                found = True
+                cprj_pn = sw_pn
+                continue # Look at rest of tabs to see if another exists w/ P/N, even though that isn't expected.
+
+        assert found, "No cprj SW P/N found in any tab in file '%s'." % self.export_path
+
+        return cprj_pn
+
+    def __str__(self):
+        return self.cdf_filename
+
+    def __repr__(self):
+        return "CDF object '%s'" % self.__str__()
+
+
+class CloneDataFileDB(object):
+    def __init__(self, cdf_import_dir, conv_export_dir):
+        assert os.path.exists(cdf_import_dir), "Can't find source_dir '%s'" % cdf_import_dir
+        assert os.path.exists(conv_export_dir), "Can't find export_dir '%s'" % conv_export_dir
+
+        self.file_type = "CDF"
+        self.source_dir = cdf_import_dir
+        self.export_dir = conv_export_dir
+
+        self.CDF_list = None # To be populated by _build_cdf_list()
+
+        self.cprj_rev_dict = dict() # value: CIT cprj rev; val: list of CDF objects.
+        # Populated when mismatch detected b/w SW rev and CIT cprj rev, resulting in incorrect VCL-alias mappings
+
+        self._build_cdf_list()
+
+    def _build_cdf_list(self):
+        self.CDF_list = []
+        for filename in sorted(os.listdir(self.source_dir)):
+            if filename.upper().endswith(self.file_type):
+                self.CDF_list.append( CloneDataFile(os.path.join(self.source_dir, filename)) )
+
+    def convert_all(self, ActiveGUI_Driver, check_SNs=False):
+        try:
+            ActiveGUI_Driver.select_program(self.file_type)
+        except UserCancel:
+            return
+
+        if self.cprj_rev_dict:
+            # Tail call will land here if any CDFs were encountered in previous
+            # loop that needed a different cprf rev to process correctly.
+            cprj_rev, CDF_obj_list = self.cprj_rev_dict.popitem()
+        else:
+            # First call will land here.
+            CDF_obj_list = self.CDF_list
+
+        for CDF_obj in tqdm(CDF_obj_list, colour="#6700ff"):
+            # Check for existing export
+            if CDF_obj.has_export(self.export_dir):
+                # Skip if already processed this file.
+                tqdm.write("Already processed %s" % CDF_obj) # DEBUG
+                continue
+                # TODO - add temporary delete-and-reprocess action for scrubbing invalid mappings from exports.
+
+            try:
+                success = CDF_obj.convert(ActiveGUI_Driver, self.export_dir, check_sn=check_SNs)
+            except Exception as exception_text:
+                print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
+                print("\nEncountered exception processing %s" % CDF_obj + colorama.Style.RESET_ALL)
+                print(exception_text)
+                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+                print("Press Enter to continue with other files, 'e' to exit "
+                                "file-conversion loop, or 'q' to quit program.")
+                answer = input("> " + colorama.Style.RESET_ALL)
+                if answer.lower() == "":
+                    ActiveGUI_Driver.select_program(self.file_type)
+                    continue
+                elif answer.lower() == "e":
+                    break
+                else:
+                    # Accept anything other than a blank input or 'e' as a quit command.
+                    quit()
+            else:
+                if success:
+                    tqdm.write("Processed %s" % CDF_obj)
+                elif CDF_obj.is_valid_cdf:
+                    self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()].append(CDF_obj)
+                    tqdm.write("File %s needs rev-%s cprj file for conversion."
+                                         % (CDF_obj, CDF_obj.get_ctrl_sw_rev()))
+                # otherwise, it was an empty file
+        # if self.cprj_rev_dict:                                         # TODO
+        #     # Process files needing different cprj file(s):            # TODO
+        #     self.convert_all(ActiveGUI_Driver, check_SNs=check_SNs)    # TODO
+
+
+def convert_all(source_dir, dest_dir, check_SNs=False):
+    file_type = "cpf"
+
     if not os.path.exists(source_dir):
         raise Exception("Can't find source_dir '%s'" % source_dir)
     if not os.path.exists(dest_dir):
@@ -786,11 +976,6 @@ def convert_all(file_type, source_dir, dest_dir, check_SNs=False):
         # Check for existing export
         if file_type == "cpf" and (os.path.exists(os.path.join(dest_dir,
                             os.path.splitext(filename)[0] + CPF_COMBINED_EXPORT_SUFFIX))):
-            # Skip if already processed this file.
-            tqdm.write("Already processed %s" % os.path.basename(filename)) # DEBUG
-            continue
-        elif file_type == "cdf" and (os.path.exists(os.path.join(dest_dir,
-                            os.path.splitext(filename)[0] + CDF_EXPORT_SUFFIX))):
             # Skip if already processed this file.
             tqdm.write("Already processed %s" % os.path.basename(filename)) # DEBUG
             continue
@@ -831,7 +1016,7 @@ def convert_cpfs_in_export(dir_path):
     if not os.path.exists(dir_path):
         raise Exception("Can't find dir_path '%s'" % dir_path)
 
-    print("\nConverting CPF exports from tsv format (named .XLS) to .xslx (in dir "
+    print("\nConverting CPF exports from .tsv format (named .XLS) to .xslx (in dir "
                                                     "\n\t\"%s\")..." % dir_path)
     try:
         fixcpf.convert_all_param_exports(dir_path, check_xls=False)
@@ -872,6 +1057,9 @@ if __name__ == "__main__":
                                     "exports from binary to .xlsx file format.")
     parser.add_argument("-d", "--dir", help="Specify dir containing exports "
                                                         "to convert.", type=str)
+    parser.add_argument("-s", "--slow", help="Specify factor by which to extend "
+                            "pauses b/w GUI commands. >1 extends pauses while "
+                                            "<1 speeds them up.", type=float)
     # parser.add_argument("-f", "--file", help="Specify file path of one export  " # maybe implement later
     #                                                     "to reformat.", type=str)
     # parser.add_argument("-a", "--auto", help="Specify to execute entire routine " # maybe implement later
@@ -906,12 +1094,20 @@ if __name__ == "__main__":
 
     # Convert exports
     if os.name == "nt":
+        if args.slow:
+            GUI_PAUSE_MULT = args.slow
+        else:
+            GUI_PAUSE_MULT = 1.0 # Extend or reduce pauses between GUI commands
+        gui.PAUSE = 0.5 * GUI_PAUSE_MULT # 500 ms pause after each command.
+
         try:
-            convert_all("cpf", import_dir, export_dir, check_SNs=check_vehicle_sns)
-            convert_all("cdf", import_dir, export_dir, check_SNs=check_vehicle_sns)
+            convert_all(import_dir, export_dir, check_SNs=check_vehicle_sns)
+
+            GUI_DriverInstance = GUI_Driver()
+            CDF_Database = CloneDataFileDB(import_dir, export_dir)
+            CDF_Database.convert_all(GUI_DriverInstance, check_SNs=check_vehicle_sns)
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI "
-                                                            "interaction done\n")
-            print(colorama.Style.RESET_ALL)
+                                "interaction done\n" + colorama.Style.RESET_ALL)
         except gui.FailSafeException:
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser "
                                                     "canceled GUI interaction.")
