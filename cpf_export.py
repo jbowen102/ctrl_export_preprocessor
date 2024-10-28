@@ -536,11 +536,6 @@ class GUI_Driver(object):
         if not os.path.exists(file_path):
             raise Exception("Can't find file_path '%s'" % file_path)
 
-        # Ensure file size is nonzero. CIT gives error window for empty file.
-        if not os.path.getsize(file_path):
-            # Skip empty file
-            return False
-
         # Requires CIT project open and Programmer window open, in focus.
         if not self.gui_in_focus:
             self.select_program("CDF")
@@ -639,32 +634,52 @@ class CloneDataFile(object):
         assert self.source_ctrl_sw_pn is not None, "Tried to get %s's ctrl_sw_rev, but it hasn't been set yet" % self.cdf_filename
         return REV_MAP_ALL_F[self.source_ctrl_sw_pn]
 
-    def has_export(self, export_dir=None):
+    def set_export_dir(self, export_dir_path):
+        if self.has_export() and os.path.dirname(self.export_path) != export_dir_path:
+            raise Exception("Tried to set different export dir path for %s" % self)
+        if not os.path.exists(export_dir_path):
+            raise Exception("Can't find target_dir '%s' to export %s" % (export_dir_path, self))
+
+        self.temp_dir = os.path.join(export_dir_path, "tmp")
+        if not os.path.exists(self.temp_dir):
+            os.mkdir(self.temp_dir) # Will leave in place after processing finished.
+        self.export_path = os.path.join(export_dir_path, self.export_filename)
+
+    def has_export(self, export_dir_given=None):
         """Returns True iff CDF object already has a stored, valid filepath in export_path attribute
         or if export_filename exists in given export_dir.
+        Does not create persistent export_path attribute using export_dir_given.
         """
-        if self.export_path is None and export_dir is None:
+        if self.export_path is None and export_dir_given is None:
             return False
         if self.export_path is None:
-            return os.path.exists(os.path.join(export_dir, self.export_filename))
+            # Object hasn't stored an export_path yet, but caller passed in an export_dir to try.
+            export_path_try = os.path.join(export_dir_given, self.export_filename)
+            if os.path.exists(export_path_try):
+                self.export_path = export_path_try
+                return True
+            else:
+                return False
         elif os.path.exists(self.export_path):
+            # export_path string stored, and the path is valid.
             return True
         else:
-            return False # path string stored, but nothing written there yet.
+            return False # export_path string stored, but nothing written there yet.
+
+    def remove_export(self):
+        assert self.has_export(), "Tried to remove %s export but it doesn't exist." % self
+        os.remove(self.export_path)
 
     def convert(self, GUIProgDriver, target_dir,  check_sn=False):
         """
         Converts a CDF to Excel format.
         check_sn indicates whether to validate vehicle S/N in filename.
         """
-        if not os.path.exists(target_dir):
-            raise Exception("Can't find target_dir '%s'" % target_dir)
+        assert self.is_valid_cdf(), "Tried to convert an empty file."
 
-        self.temp_dir = os.path.join(target_dir, "tmp")
-        if not os.path.exists(self.temp_dir):
-            os.mkdir(self.temp_dir) # Will leave in place after processing finished.
+        assert not self.has_export(), "Tried to convert %s, but an export already exists here: '%s'" % (self, self.export_path)
+        self.set_export_dir(target_dir)
 
-        self.export_path = os.path.join(target_dir, self.export_filename)
         # See if export exists there already
         assert not self.has_export(), "Tried to process file %s that already has export at %s" % (self.cdf_filename, self.export_path)
 
@@ -681,7 +696,7 @@ class CloneDataFile(object):
 
         valid_alias_mapping = self.check_cprj_rev_match()
         if not valid_alias_mapping:
-            os.remove(self.export_path)
+            self.remove_export()
             return False
 
         return True
@@ -712,7 +727,6 @@ class CloneDataFile(object):
 
     def extract_stored_vehicle_sn(self):
         CDF_VARIABLE_NAME = "nvuser4"
-
         assert self.has_export(), "Tried to extract vehicle S/N from CDF export, but export doesn't exist.\n\t%s" % self
 
         # vehicle S/N in export file
@@ -768,7 +782,11 @@ class CloneDataFile(object):
         else:
             self.vehicle_sn_param = vehicle_sn_param # string
 
-    def check_cprj_rev_match(self):
+    def check_cprj_rev_match(self, given_export_dir=None):
+        if given_export_dir:
+            self.set_export_dir(given_export_dir)
+        assert self.has_export(), "Tried to check cprj rev mapping in CDF export, but export doesn't exist.\n\t%s" % self
+
         cdf_cprj_pn = self.extract_cdf_cprj_pn()
         cprj_map_rev = REV_MAP_ALL_F[cdf_cprj_pn]
 
@@ -802,6 +820,7 @@ class CloneDataFile(object):
         """Takes in CDF export (.xlsx format), locates source-vehicle's
         controller-software P/N, and returns it as a string.
         """
+        assert self.has_export(), "Tried to extract CDF source SW P/N from export, but export doesn't exist.\n\t%s" % self
         VSN_CDF_VAR_NAME = "user119"
         param_df = pd.read_excel(self.export_path, sheet_name="Parameters")
         for _, row in param_df.iterrows():
@@ -848,11 +867,12 @@ class CloneDataFile(object):
             # Replace period with "G" in SW P/N string and return
             self.source_ctrl_sw_pn = "G".join(vehicle_ctrl_sw_param.split(".")) # string
 
-    def extract_cdf_cprj_pn(self):
+    def extract_cdf_cprj_pn(self, given_export_dir=None):
         """Takes in CDF export (.xlsx format), locates the SW P/N associated with
         the .cprj file that was loaded in CIT when the CDF was converted.
         Returns cprj SW P/N as string.
         """
+        assert self.has_export(), "Tried to extract CDF cprj P/N from export, but export doesn't exist.\n\t%s" % self
         worksheet_names = pd.ExcelFile(self.export_path).sheet_names
         # https://stackoverflow.com/a/17977609
 
@@ -911,39 +931,56 @@ class CloneDataFileDB(object):
                 self.CDF_list.append( CloneDataFile(os.path.join(self.source_dir, filename)) )
 
     def convert_all(self, ActiveGUI_Driver, check_SNs=False):
+        if self.cprj_rev_dict:
+            # Tail call will land here to process previously-encounterd CDFs
+            # that need a different cprf rev to process correctly.
+            cprj_rev, CDF_obj_list = self.cprj_rev_dict.popitem()
+            ActiveGUI_Driver.lose_focus()
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            input("Load cprj w/ rev %s into CIT then press Enter to continue." % cprj_rev + colorama.Style.RESET_ALL)
+        else:
+            # First call will land here.
+            CDF_obj_list = self.CDF_list
+
         try:
             ActiveGUI_Driver.select_program(self.file_type)
         except UserCancel:
             return
 
-        if self.cprj_rev_dict:
-            # Tail call will land here if any CDFs were encountered in previous
-            # loop that needed a different cprf rev to process correctly.
-            cprj_rev, CDF_obj_list = self.cprj_rev_dict.popitem()
-        else:
-            # First call will land here.
-            CDF_obj_list = self.CDF_list
-
         for CDF_obj in tqdm(CDF_obj_list, colour="#6700ff"):
             # Check for existing export
-            if CDF_obj.has_export(self.export_dir):
-                # Skip if already processed this file.
-                tqdm.write("Already processed %s" % CDF_obj) # DEBUG
+            if not CDF_obj.is_valid_cdf():
+                tqdm.write("%s: Skipping empty file" % CDF_obj)
                 continue
-                # TODO - add temporary delete-and-reprocess action for scrubbing invalid mappings from exports.
+            elif CDF_obj.has_export(self.export_dir):
+                # Skip if already processed this file.
+                # Will delete and reprocess to remove invalid mappings from exports.
+                if not CDF_obj.check_cprj_rev_match(self.export_dir):
+                    tqdm.write("\t%s: Already processed but invalid alias mapping. Deleting export" % CDF_obj)
+                    CDF_obj.remove_export()
+                    # Fall through to conversion below, where it will be converted
+                    # again (possibly w/ the right mapping), and if the mapping is wrong
+                    # again, the file will get stored along with the needed mapping in cprj_rev_dict
+                else:
+                    # revs match, so skip this file.
+                    tqdm.write("\t%s: Already processed; valid alias mapping confirmed" % CDF_obj)
+                    continue
 
             try:
                 success = CDF_obj.convert(ActiveGUI_Driver, self.export_dir, check_sn=check_SNs)
             except Exception as exception_text:
+                ActiveGUI_Driver.lose_focus()
+                if CDF_obj.has_export():
+                    # Remove export that may not have been validated
+                    CDF_obj.remove_export()
                 print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
-                print("\nEncountered exception processing %s" % CDF_obj + colorama.Style.RESET_ALL)
+                print("\n%s: Encountered exception during processing" % CDF_obj + colorama.Style.RESET_ALL)
                 print(exception_text)
                 print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
                 print("Press Enter to continue with other files, 'e' to exit "
                                 "file-conversion loop, or 'q' to quit program.")
                 answer = input("> " + colorama.Style.RESET_ALL)
                 if answer.lower() == "":
-                    ActiveGUI_Driver.select_program(self.file_type)
                     continue
                 elif answer.lower() == "e":
                     break
@@ -952,15 +989,19 @@ class CloneDataFileDB(object):
                     quit()
             else:
                 if success:
-                    tqdm.write("Processed %s" % CDF_obj)
-                elif CDF_obj.is_valid_cdf:
+                    tqdm.write("%s: Processed" % CDF_obj)
+                else:
+                    # success=False (but no exception thrown) means check_cprj_rev_match() failed
+                    # Add to dict to be processed with different rev in tail call below.
+                    if CDF_obj.get_ctrl_sw_rev() not in self.cprj_rev_dict:
+                        self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()] = []
                     self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()].append(CDF_obj)
-                    tqdm.write("File %s needs rev-%s cprj file for conversion."
-                                         % (CDF_obj, CDF_obj.get_ctrl_sw_rev()))
-                # otherwise, it was an empty file
-        # if self.cprj_rev_dict:                                         # TODO
-        #     # Process files needing different cprj file(s):            # TODO
-        #     self.convert_all(ActiveGUI_Driver, check_SNs=check_SNs)    # TODO
+                    # tqdm.write("File %s needs rev-%s cprj file for conversion."
+                    #                      % (CDF_obj, CDF_obj.get_ctrl_sw_rev()))
+
+        if self.cprj_rev_dict:
+            # Process files needing different cprj file(s):
+            self.convert_all(ActiveGUI_Driver, check_SNs=check_SNs)
 
 
 def convert_all(source_dir, dest_dir, check_SNs=False):
