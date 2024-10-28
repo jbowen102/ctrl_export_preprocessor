@@ -615,14 +615,19 @@ class CloneDataFile(object):
         self.export_filename = os.path.splitext(self.cdf_filename)[0] + CDF_EXPORT_SUFFIX # Usually doesn't exist yet.
         self.export_path = None       # To be set by convert()
 
-        self.valid_cdf = False        # Some CDFs are empty. To be determined by GUI in convert()
+        # Ensure CDF file size is nonzero. CIT gives error window for empty file.
+        if os.path.getsize(self.import_filepath):
+            self.valid_cdf = True
+        else:
+            # Empty file
+            self.valid_cdf = False
 
         self.source_ctrl_sw_pn = None # To be set by extract_cdf_source_sw_pn()
 
         self.vehicle_sn_param = None  # Vehicle S/N stored in controller. Various failure modes can couse this to be wrong.
         self.vehicle_sn = None        # Canonical vehicle S/N after validation. Still may be none if impossible to confidently infer.
 
-        self.GUI_driver_in_use = None # To be set by convert()
+        self.GUI_Driver_in_use = None # To be set by convert()
 
     def is_valid_cdf(self):
         return self.valid_cdf
@@ -688,15 +693,15 @@ class CloneDataFile(object):
                                                     "Type S/N manually: " % self.cdf_filename
         vehicle_sn_from_filename, stole_focus = find_in_string(SN_REGEX, self.cdf_filename, prompt_str)
         if stole_focus:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
 
         self.extract_stored_vehicle_sn() # Populates self.vehicle_sn_param
         if self.vehicle_sn_param is None:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("No valid S/N found in \"%s\". Press Enter to continue." % self.cdf_filename + colorama.Style.RESET_ALL)
         elif self.vehicle_sn_param != vehicle_sn_from_filename:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
                                     "(import and export).\nPress Enter to continue."
@@ -731,7 +736,7 @@ class CloneDataFile(object):
             # If vehicle S/N was not written to controller, S/N value in CDF export
             # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
             # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
                     % (hex(int(vehicle_sn_param)), self.export_filename) + colorama.Style.RESET_ALL)
@@ -742,10 +747,10 @@ class CloneDataFile(object):
         prompt_str = ("Found multiple possible S/N values stored in CDF: '%s'. Press Enter to continue." % vehicle_sn_param)
         valid_sn, stole_focus = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
         if stole_focus:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
 
         if valid_sn is None:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("Expected '%s' variable to contain S/N in 7-digit format starting "
                             "with 3, 5, or 8.\nFound '%s' in %s instead."
@@ -753,7 +758,7 @@ class CloneDataFile(object):
                                                         + colorama.Style.RESET_ALL)
             self.vehicle_sn_param = None
         elif valid_sn != vehicle_sn_param:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
                             "may contain additional content."
@@ -770,7 +775,7 @@ class CloneDataFile(object):
         self.extract_cdf_source_sw_pn()
 
         if self.source_ctrl_sw_pn is None:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
                                                 "mapping. Press Enter to continue."
@@ -780,7 +785,7 @@ class CloneDataFile(object):
 
         ctrl_sw_rev = REV_MAP_ALL_F[self.source_ctrl_sw_pn]
         if cprj_map_rev != ctrl_sw_rev:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("SW mapping rev mismatch: %s in \"%s\" is rev %s, but project "
                         "file \"%s\" is rev %s.\nVCL Alias mapping likely invalid.\n"
@@ -821,10 +826,10 @@ class CloneDataFile(object):
                         % (self.export_filename, vehicle_ctrl_sw_param))
         valid_sw_pn, stole_focus = find_in_string(CDF_SW_PN_REGEX, vehicle_ctrl_sw_param, prompt_str, allow_none=True)
         if stole_focus:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
 
         if valid_sw_pn is None:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("Expected '%s' variable to contain SW P/N in ########.## format."
                                                     "\nFound '%s' in %s instead."
@@ -832,7 +837,7 @@ class CloneDataFile(object):
                         self.export_filename) + colorama.Style.RESET_ALL)
             self.source_ctrl_sw_pn = None
         elif valid_sw_pn != vehicle_ctrl_sw_param:
-            GUI_driver_in_use.lose_focus()
+            self.GUI_Driver_in_use.lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
                                         "format but may contain additional content."
@@ -859,7 +864,7 @@ class CloneDataFile(object):
             # Find worksheet w/ P/N in the name
             sw_pn, stole_focus = find_in_string(SW_PN_REGEX, sheet_name, prompt_str, allow_none=True)
             if stole_focus:
-                GUI_driver_in_use.lose_focus()
+                self.GUI_Driver_in_use.lose_focus()
 
             if sw_pn is None:
                 continue
