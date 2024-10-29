@@ -166,7 +166,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                                                     + colorama.Style.RESET_ALL)
     else:
         print(colorama.Fore.MAGENTA + "\t[None]" + colorama.Style.RESET_ALL)
-        time.sleep(2 * GUI_PAUSE_MULT) # Pause for user to see that no files were renamed.
+        time.sleep(2) # Pause for user to see that no files were renamed.
 
 
 def sync_remote(src, dest, multilevel=True, purge=False, silent=False):
@@ -513,7 +513,7 @@ class GUI_Driver(object):
         return self.gui_in_focus
 
     def lose_focus(self):
-        self.gui_in_focus = True
+        self.gui_in_focus = False
 
     def select_program(self, filetype):
         # Brings conversion program into focus.
@@ -603,7 +603,7 @@ class GUI_Driver(object):
 
 
 class CloneDataFile(object):
-    def __init__(self, source_filepath):
+    def __init__(self, source_filepath, CDF_DB):
         assert os.path.exists(source_filepath), "Tried to create CDF object w/ invalid filepath: %s" % import_filepath
         self.import_filepath = source_filepath
         self.cdf_filename = os.path.basename(source_filepath)
@@ -622,7 +622,7 @@ class CloneDataFile(object):
         self.vehicle_sn_param = None  # Vehicle S/N stored in controller. Various failure modes can couse this to be wrong.
         self.vehicle_sn = None        # Canonical vehicle S/N after validation. Still may be none if impossible to confidently infer.
 
-        self.GUI_Driver_in_use = None # To be set by convert()
+        self.ParentDB = CDF_DB
 
     def is_valid_cdf(self):
         return self.valid_cdf
@@ -670,7 +670,7 @@ class CloneDataFile(object):
         assert self.has_export(), "Tried to remove %s export but it doesn't exist." % self
         os.remove(self.export_path)
 
-    def convert(self, GUIProgDriver, target_dir,  check_sn=False):
+    def convert(self, target_dir, check_sn=False):
         """
         Converts a CDF to Excel format.
         check_sn indicates whether to validate vehicle S/N in filename.
@@ -683,10 +683,10 @@ class CloneDataFile(object):
         # See if export exists there already
         assert not self.has_export(), "Tried to process file %s that already has export at %s" % (self.cdf_filename, self.export_path)
 
-        self.GUI_Driver_in_use = GUIProgDriver
-        self.valid_cdf = self.GUI_Driver_in_use.open_cdf(self.import_filepath)
+        assert self.ParentDB.get_GUI_Driver() is not None, "Tried to convert %s but no GUI driver active." % self
+        self.valid_cdf = self.ParentDB.get_GUI_Driver().open_cdf(self.import_filepath)
         if self.valid_cdf:
-            self.GUI_Driver_in_use.export_cdf(self.export_path)
+            self.ParentDB.get_GUI_Driver().export_cdf(self.export_path)
             # select_program("cdf") # Inconsistent Excel behavior - sometimes steals focus and sometimes doesn't
         else:
             print("\n\tSkipping %s (empty file)." % os.path.basename(cdf_path))
@@ -708,15 +708,15 @@ class CloneDataFile(object):
                                                     "Type S/N manually: " % self.cdf_filename
         vehicle_sn_from_filename, stole_focus = find_in_string(SN_REGEX, self.cdf_filename, prompt_str)
         if stole_focus:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
 
         self.extract_stored_vehicle_sn() # Populates self.vehicle_sn_param
         if self.vehicle_sn_param is None:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("No valid S/N found in \"%s\". Press Enter to continue." % self.cdf_filename + colorama.Style.RESET_ALL)
         elif self.vehicle_sn_param != vehicle_sn_from_filename:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
                                     "(import and export).\nPress Enter to continue."
@@ -750,7 +750,7 @@ class CloneDataFile(object):
             # If vehicle S/N was not written to controller, S/N value in CDF export
             # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
             # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
                     % (hex(int(vehicle_sn_param)), self.export_filename) + colorama.Style.RESET_ALL)
@@ -761,10 +761,10 @@ class CloneDataFile(object):
         prompt_str = ("Found multiple possible S/N values stored in CDF: '%s'. Press Enter to continue." % vehicle_sn_param)
         valid_sn, stole_focus = find_in_string(SN_REGEX, vehicle_sn_param, prompt_str, allow_none=True)
         if stole_focus:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
 
         if valid_sn is None:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("Expected '%s' variable to contain S/N in 7-digit format starting "
                             "with 3, 5, or 8.\nFound '%s' in %s instead."
@@ -772,7 +772,7 @@ class CloneDataFile(object):
                                                         + colorama.Style.RESET_ALL)
             self.vehicle_sn_param = None
         elif valid_sn != vehicle_sn_param:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
                             "may contain additional content."
@@ -793,7 +793,7 @@ class CloneDataFile(object):
         self.extract_cdf_source_sw_pn()
 
         if self.source_ctrl_sw_pn is None:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
                                                 "mapping. Press Enter to continue."
@@ -803,14 +803,10 @@ class CloneDataFile(object):
 
         ctrl_sw_rev = REV_MAP_ALL_F[self.source_ctrl_sw_pn]
         if cprj_map_rev != ctrl_sw_rev:
-            self.GUI_Driver_in_use.lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
-            input("SW mapping rev mismatch: %s in \"%s\" is rev %s, but project "
-                        "file \"%s\" is rev %s.\nVCL Alias mapping likely invalid.\n"
-                    "Will delete file and reprocess later w/ rev-%s cprj loaded in CIT."
-                     % (self.source_ctrl_sw_pn, self.cdf_filename, ctrl_sw_rev,
-                                         cdf_cprj_pn, cprj_map_rev, ctrl_sw_rev)
-                                                     + colorama.Style.RESET_ALL)
+            # self.ParentDB.get_GUI_Driver().lose_focus() # DEBUG
+            # print(colorama.Fore.RED + colorama.Style.BRIGHT) # DEBUG
+            # print("%s: cprj rev mismatch - Deleting export\n\tCtrl SW %s rev %s, but project file used (%s) was rev %s."
+            #                      % (self, self.source_ctrl_sw_pn, ctrl_sw_rev, cdf_cprj_pn, cprj_map_rev) + colorama.Style.RESET_ALL) # DEBUG
             # Caller will delete file.
             return False
         else:
@@ -845,10 +841,10 @@ class CloneDataFile(object):
                         % (self.export_filename, vehicle_ctrl_sw_param))
         valid_sw_pn, stole_focus = find_in_string(CDF_SW_PN_REGEX, vehicle_ctrl_sw_param, prompt_str, allow_none=True)
         if stole_focus:
-            self.GUI_Driver_in_use.lose_focus()
+            ParentDB.get_GUI_Driver().lose_focus()
 
         if valid_sw_pn is None:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("Expected '%s' variable to contain SW P/N in ########.## format."
                                                     "\nFound '%s' in %s instead."
@@ -856,7 +852,7 @@ class CloneDataFile(object):
                         self.export_filename) + colorama.Style.RESET_ALL)
             self.source_ctrl_sw_pn = None
         elif valid_sw_pn != vehicle_ctrl_sw_param:
-            self.GUI_Driver_in_use.lose_focus()
+            self.ParentDB.get_GUI_Driver().lose_focus()
             print(colorama.Fore.RED + colorama.Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
                                         "format but may contain additional content."
@@ -884,7 +880,7 @@ class CloneDataFile(object):
             # Find worksheet w/ P/N in the name
             sw_pn, stole_focus = find_in_string(SW_PN_REGEX, sheet_name, prompt_str, allow_none=True)
             if stole_focus:
-                self.GUI_Driver_in_use.lose_focus()
+                self.ParentDB.get_GUI_Driver().lose_focus()
 
             if sw_pn is None:
                 continue
@@ -924,52 +920,61 @@ class CloneDataFileDB(object):
 
         self._build_cdf_list()
 
+        self.ActiveGUI_Driver = None    # To be set by convert_all()
+
+    def get_GUI_Driver(self):
+        return self.ActiveGUI_Driver
+
     def _build_cdf_list(self):
         self.CDF_list = []
         for filename in sorted(os.listdir(self.source_dir)):
             if filename.upper().endswith(self.file_type):
-                self.CDF_list.append( CloneDataFile(os.path.join(self.source_dir, filename)) )
+                self.CDF_list.append( CloneDataFile(os.path.join(self.source_dir, filename), self) )
 
     def convert_all(self, ActiveGUI_Driver, check_SNs=False):
         if self.cprj_rev_dict:
             # Tail call will land here to process previously-encounterd CDFs
             # that need a different cprf rev to process correctly.
             cprj_rev, CDF_obj_list = self.cprj_rev_dict.popitem()
-            ActiveGUI_Driver.lose_focus()
+            self.ActiveGUI_Driver.lose_focus()
             print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
             input("Load cprj w/ rev %s into CIT then press Enter to continue." % cprj_rev + colorama.Style.RESET_ALL)
         else:
             # First call will land here.
             CDF_obj_list = self.CDF_list
 
+        self.ActiveGUI_Driver = ActiveGUI_Driver
         try:
-            ActiveGUI_Driver.select_program(self.file_type)
+            self.ActiveGUI_Driver.select_program(self.file_type)
         except UserCancel:
             return
 
         for CDF_obj in tqdm(CDF_obj_list, colour="#6700ff"):
             # Check for existing export
             if not CDF_obj.is_valid_cdf():
-                tqdm.write("%s: Skipping empty file" % CDF_obj)
+                print(colorama.Fore.WHITE, colorama.Style.DIM, colorama.Style.DIM, end="")
+                tqdm.write("%s: Skipping empty file" % CDF_obj + colorama.Style.RESET_ALL)
                 continue
             elif CDF_obj.has_export(self.export_dir):
                 # Skip if already processed this file.
                 # Will delete and reprocess to remove invalid mappings from exports.
                 if not CDF_obj.check_cprj_rev_match(self.export_dir):
-                    tqdm.write("\t%s: Already processed but invalid alias mapping. Deleting export" % CDF_obj)
                     CDF_obj.remove_export()
+                    print(colorama.Fore.RED, end="")
+                    tqdm.write(" %s: Already processed but invalid alias mapping - export deleted" % CDF_obj + colorama.Style.RESET_ALL)
                     # Fall through to conversion below, where it will be converted
                     # again (possibly w/ the right mapping), and if the mapping is wrong
                     # again, the file will get stored along with the needed mapping in cprj_rev_dict
                 else:
                     # revs match, so skip this file.
-                    tqdm.write("\t%s: Already processed; valid alias mapping confirmed" % CDF_obj)
+                    print(colorama.Fore.WHITE, colorama.Style.DIM, end="")
+                    tqdm.write("%s: Already processed; valid alias mapping confirmed" % CDF_obj + colorama.Style.RESET_ALL)
                     continue
 
             try:
-                success = CDF_obj.convert(ActiveGUI_Driver, self.export_dir, check_sn=check_SNs)
+                success = CDF_obj.convert(self.export_dir, check_sn=check_SNs)
             except Exception as exception_text:
-                ActiveGUI_Driver.lose_focus()
+                self.ActiveGUI_Driver.lose_focus()
                 if CDF_obj.has_export():
                     # Remove export that may not have been validated
                     CDF_obj.remove_export()
@@ -989,10 +994,13 @@ class CloneDataFileDB(object):
                     quit()
             else:
                 if success:
-                    tqdm.write("%s: Processed" % CDF_obj)
+                    print(colorama.Fore.GREEN, end="")
+                    tqdm.write(" %s: Processed; valid alias mapping confirmed" % CDF_obj + colorama.Style.RESET_ALL)
                 else:
                     # success=False (but no exception thrown) means check_cprj_rev_match() failed
                     # Add to dict to be processed with different rev in tail call below.
+                    print(colorama.Fore.RED, end="")
+                    tqdm.write(" %s: Processed but with invalid alias mapping - export deleted" % CDF_obj + colorama.Style.RESET_ALL)
                     if CDF_obj.get_ctrl_sw_rev() not in self.cprj_rev_dict:
                         self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()] = []
                     self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()].append(CDF_obj)
@@ -1001,7 +1009,7 @@ class CloneDataFileDB(object):
 
         if self.cprj_rev_dict:
             # Process files needing different cprj file(s):
-            self.convert_all(ActiveGUI_Driver, check_SNs=check_SNs)
+            self.convert_all(self.ActiveGUI_Driver, check_SNs=check_SNs)
 
 
 def convert_all(source_dir, dest_dir, check_SNs=False):
@@ -1155,6 +1163,7 @@ if __name__ == "__main__":
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI "
                                 "interaction done\n" + colorama.Style.RESET_ALL)
         except gui.FailSafeException:
+            GUI_DriverInstance.lose_focus()
             print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser "
                                                     "canceled GUI interaction.")
             print(colorama.Style.RESET_ALL)
