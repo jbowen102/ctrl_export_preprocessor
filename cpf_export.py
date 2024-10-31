@@ -25,8 +25,8 @@ from dir_names import DIR_REMOTE_SRC, \
                       DIR_FIELD_DATA, \
                         DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
                         DIR_EXPORT, \
-                      DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, \
-                      AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, \
+                      DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, DIR_REMOTE_SHARE_MFG, \
+                      AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, AZ_BLOB_ADDR_MFG, \
                       ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
@@ -342,7 +342,7 @@ def select_program(filetype):
     answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
                     "is off, then click OK." % (proj_file_msg, filetype.upper()))
     if answer == "OK":
-        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
+        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nGUI interaction "
                     "commencing (%s). Move mouse pointer to upper left of "
                     "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
     else:
@@ -524,7 +524,7 @@ class GUI_Driver(object):
         answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
                         "is off, then click OK." % (proj_file_msg, filetype.upper()))
         if answer == "OK":
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI interaction "
+            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nGUI interaction "
                         "commencing (%s). Move mouse pointer to upper left of "
                         "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
             self.gui_in_focus = True
@@ -952,7 +952,7 @@ class CloneDataFileDB(object):
         for CDF_obj in tqdm(CDF_obj_list, colour="#6700ff"):
             # Check for existing export
             if not CDF_obj.is_valid_cdf():
-                print(colorama.Fore.WHITE, colorama.Style.DIM, colorama.Style.DIM, end="")
+                print(colorama.Fore.WHITE, colorama.Style.DIM, end="")
                 tqdm.write("%s: Skipping empty file" % CDF_obj + colorama.Style.RESET_ALL)
                 continue
             elif CDF_obj.has_export(self.export_dir):
@@ -979,7 +979,7 @@ class CloneDataFileDB(object):
                     # Remove export that may not have been validated
                     CDF_obj.remove_export()
                 print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
-                print("\n%s: Encountered exception during processing" % CDF_obj + colorama.Style.RESET_ALL)
+                print(" %s: Encountered exception during processing" % CDF_obj + colorama.Style.RESET_ALL)
                 print(exception_text)
                 print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
                 print("Press Enter to continue with other files, 'e' to exit "
@@ -1205,7 +1205,7 @@ if __name__ == "__main__":
                 print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
                 returncode = subprocess.call(["azcopy", "sync",
                                                 "--delete-destination", "true",
-                                         "--exclude-path=tmp", "--recursive",
+                                                          "--exclude-path=tmp",
                                           DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
                 # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
                 # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
@@ -1230,6 +1230,21 @@ if __name__ == "__main__":
                 print(colorama.Style.RESET_ALL + "...done")
             else:
                 print("Skipping sync from batt dir to shared folder.")
+
+            # MES (manufacturing) export dir
+            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            print("\nSync MES export dir from shared folder to Azure blob? "
+                                        "Enter to proceed or 'q' to quit program.")
+            answer = input("> " + colorama.Style.RESET_ALL)
+            if answer == "":
+                print("\nRunning AzCopy sync job (MES batt-scan export)...")
+                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+                returncode = subprocess.call(["azcopy", "sync",
+                                                "--delete-destination", "true",
+                                    DIR_REMOTE_SHARE_MFG + "\\", AZ_BLOB_ADDR_MFG])
+                print(colorama.Style.RESET_ALL + "...done")
+            else:
+                print("Skipping sync from MES dir to shared folder.")
 
         else:
             print("Skipping AzCopy jobs (requires Windows system).")
