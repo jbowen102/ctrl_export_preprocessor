@@ -8,9 +8,7 @@ import argparse
 import pandas as pd
 from tqdm import tqdm
 import colorama
-from xlsxwriter.workbook import Workbook
 import xlwings as xw
-import openpyxl as pyxl
 if os.name == "nt":
     # Allows testing other (non-GUI) features in WSL where pyautogui import fails
     import pyautogui as gui
@@ -799,7 +797,6 @@ class CloneDataFile(object):
                                                 "mapping. Press Enter to continue."
                                         % self.cdf_filename + colorama.Style.RESET_ALL)
             return False
-            # TODO - implement other means of inferring vehicle's SW rev automatically or w/ user input.
 
         ctrl_sw_rev = REV_MAP_ALL_F[self.source_ctrl_sw_pn]
         if cprj_map_rev != ctrl_sw_rev:
@@ -1179,72 +1176,72 @@ if __name__ == "__main__":
     if auto_run:
         # Sync to shared folder
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-        print("\nSync controller export dir to shared folder? Enter to proceed, "
-                                            "'s' to skip, or 'q' to quit program.")
+        print("\nSync local controller-export dir to shared folder? Enter to "
+                                "proceed, 's' to skip, or 'q' to quit program.")
         answer = input("> " + colorama.Style.RESET_ALL)
         if answer == "":
-            print("Syncing processed files to shared folder...")
+            print("Syncing ctrl exports to shared folder...")
             sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
                                                     purge=True, multilevel=False)
             print("...done")
         elif answer.lower() == "s":
-            print("Skipping shared-folder sync.")
+            print("Skipping sync from local ctrl-export dir to shared folder.")
         else:
             # Accept anything other than a blank input as a quit command.
             quit()
 
         # Sync to second remote (Azure blob)
-        if os.name=="nt":
-            # Controller exports
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            print("\nSync controller export dir to Azure blob? Enter to proceed, "
-                                            "'s' to skip, or 'q' to quit program.")
-            answer = input("> " + colorama.Style.RESET_ALL)
-            if answer == "":
-                print("\nRunning AzCopy sync job (controller exports)...")
-                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-                returncode = subprocess.call(["azcopy", "sync",
+        # Controller exports  |  local dir --> Azure blob storage
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nSync local controller export dir to Azure blob? Enter to "
+                                "proceed, 's' to skip, or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            print("\nRunning AzCopy sync job (controller exports)...")
+            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            returncode = subprocess.call(["azcopy", "sync",
                                                 "--delete-destination", "true",
                                                           "--exclude-path=tmp",
-                                          DIR_EXPORT + "\\", AZ_BLOB_ADDR_CTRL])
-                # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
-                # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
-                print(colorama.Style.RESET_ALL + "...done")
-            elif answer.lower() == "s":
-                print("Skipping sync from ctrl-export folder to shared folder.")
-            else:
-                # Accept anything other than a blank input as a quit command.
-                quit()
-
-            # Batt export dir
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            print("\nSync battery export dir from shared folder to Azure blob? "
-                                        "Enter to proceed or 'q' to quit program.")
-            answer = input("> " + colorama.Style.RESET_ALL)
-            if answer == "":
-                print("\nRunning AzCopy sync job (batt export)...")
-                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-                returncode = subprocess.call(["azcopy", "sync",
-                                                "--delete-destination", "true",
-                                    DIR_REMOTE_SHARE_BATT + "\\", AZ_BLOB_ADDR_BATT])
-                print(colorama.Style.RESET_ALL + "...done")
-            else:
-                print("Skipping sync from batt dir to shared folder.")
-
-            # MES (manufacturing) export dir
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            print("\nSync MES export dir from shared folder to Azure blob? "
-                                        "Enter to proceed or 'q' to quit program.")
-            answer = input("> " + colorama.Style.RESET_ALL)
-            if answer == "":
-                print("\nRunning AzCopy sync job (MES batt-scan export)...")
-                print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
-                returncode = subprocess.call(["azcopy", "sync",
-                                                "--delete-destination", "true",
-                                    DIR_REMOTE_SHARE_MFG + "\\", AZ_BLOB_ADDR_MFG])
-                print(colorama.Style.RESET_ALL + "...done")
-            else:
-                print("Skipping sync from MES dir to shared folder.")
-
+                               os.path.join(DIR_EXPORT, ""), AZ_BLOB_ADDR_CTRL])
+            # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+            # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
+            # https://stackoverflow.com/a/15010678
+            print(colorama.Style.RESET_ALL + "...done")
+        elif answer.lower() == "s":
+            print("Skipping sync from local ctrl-export dir to Azure blob.")
         else:
-            print("Skipping AzCopy jobs (requires Windows system).")
+            quit()
+
+        # BDX files  |  shared folder --> Azure blob storage
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nSync battery-export dir from shared folder to Azure blob? "
+                       "Enter to proceed, 's' to skip, or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            print("\nRunning AzCopy sync job (batt exports)...")
+            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            returncode = subprocess.call(["azcopy", "sync",
+                                                "--delete-destination", "true",
+                    os.path.join(DIR_REMOTE_SHARE_BATT, ""), AZ_BLOB_ADDR_BATT])
+            print(colorama.Style.RESET_ALL + "...done")
+        elif answer.lower() == "s":
+            print("Skipping sync from shared-folder batt dir to Azure blob.")
+        else:
+            quit()
+
+        # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
+        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print("\nSync MES-export dir from shared folder to Azure blob? "
+                       "Enter to proceed, 's' to skip, or 'q' to quit program.")
+        answer = input("> " + colorama.Style.RESET_ALL)
+        if answer == "":
+            print("\nRunning AzCopy sync job (MES batt-scan export)...")
+            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            returncode = subprocess.call(["azcopy", "sync",
+                                                "--delete-destination", "true",
+                      os.path.join(DIR_REMOTE_SHARE_MFG, ""), AZ_BLOB_ADDR_MFG])
+            print(colorama.Style.RESET_ALL + "...done")
+        elif answer.lower() == "s":
+            print("Skipping sync from shared-folder MES dir to Azure blob.")
+        else:
+            quit()
