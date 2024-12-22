@@ -7,7 +7,7 @@ import shutil
 import argparse
 import pandas as pd
 from tqdm import tqdm
-import colorama
+from colorama import Style, Fore, Back
 import xlwings as xw
 if os.name == "nt":
     # Allows testing other (non-GUI) features in WSL where pyautogui import fails
@@ -81,16 +81,16 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
 
         # No matches, multiple matches, or invalid date found:
         prompted = True
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + prompt)
-        string_to_search = input(">" + colorama.Style.RESET_ALL)
+        print(Fore.GREEN + Style.BRIGHT + prompt)
+        string_to_search = input(">" + Style.RESET_ALL)
 
 
 def datestamp_remote(remote=DIR_REMOTE_SRC):
     while not os.path.exists(remote):
         # Prompt user to mount network drives if not found.
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\n"%s" not found. Mount '
+        print(Fore.GREEN + Style.BRIGHT + '\n"%s" not found. Mount '
                                 'and press Enter to try again.' % src)
-        input("> " + colorama.Style.RESET_ALL)
+        input("> " + Style.RESET_ALL)
 
     # Keep track of renames for display later.
     old_names = []
@@ -159,11 +159,11 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
     print("Renames:")
     if len(old_names) > 0:
         for i, name in enumerate(old_names):
-            print(colorama.Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
-        input(colorama.Fore.GREEN + colorama.Style.BRIGHT + "\nPress Enter to continue"
-                                                    + colorama.Style.RESET_ALL)
+            print(Fore.MAGENTA + "\t%s\t->\t%s" % (old_names[i], new_names[i]))
+        input(Fore.GREEN + Style.BRIGHT + "\nPress Enter to continue"
+                                                    + Style.RESET_ALL)
     else:
-        print(colorama.Fore.MAGENTA + "\t[None]" + colorama.Style.RESET_ALL)
+        print(Fore.MAGENTA + "\t[None]" + Style.RESET_ALL)
         time.sleep(2) # Pause for user to see that no files were renamed.
 
 
@@ -194,19 +194,19 @@ def sync_remote(src, dest, multilevel=True, purge=False, silent=False):
 
     if os.name=="nt":
         if not silent:
-            print("Attempting to run robocopy..." + colorama.Fore.YELLOW)
+            print("Attempting to run robocopy..." + Fore.YELLOW)
         returncode = subprocess.call(["robocopy", src, dest, "/compress"] + flags)
         # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
         # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
 
     elif os.name=="posix":
         if not silent:
-            print("Attempting to run rsync..." + colorama.Fore.YELLOW)
+            print("Attempting to run rsync..." + Fore.YELLOW)
         CompProc = subprocess.run(["rsync", "-azivh"] + flags + ["%s/" % src,
                                         "%s/" % dest], stderr=subprocess.STDOUT)
 
     if not silent:
-        print(colorama.Style.RESET_ALL)
+        print(Style.RESET_ALL)
 
     # Check for success
     if (os.name=="nt" and returncode < 8) or (os.name=="posix" and CompProc.returncode == 0):
@@ -242,9 +242,9 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         raise Exception("Can't find dest dir '%s'" % dest)
 
     # Pull from remote dir.
-    print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate filenames '
+    print(Fore.GREEN + Style.BRIGHT + '\nUpdate filenames '
                     'in remote directory (datestamp) "%s"? [Y / N]' % src)
-    update_remote_filenames = input("> " + colorama.Style.RESET_ALL)
+    update_remote_filenames = input("> " + Style.RESET_ALL)
     if update_remote_filenames.upper() == "Y":
         try:
             print("Backing up remote files...")
@@ -271,9 +271,9 @@ def remote_updates(src=DIR_REMOTE_SRC, dest=DIR_IMPORT):
         print("Skipping remote-dir filename updates.")
 
     # Sync renamed remote source files locally.
-    print(colorama.Fore.GREEN + colorama.Style.BRIGHT + '\nUpdate local import '
+    print(Fore.GREEN + Style.BRIGHT + '\nUpdate local import '
                                                     'dir from remote? [Y / N]')
-    update_import_dir = input("> " + colorama.Style.RESET_ALL)
+    update_import_dir = input("> " + Style.RESET_ALL)
     if update_import_dir.upper() == "Y":
         print("Updating local files from remote dir...")
         sync_remote(os.path.join(DIR_REMOTE_SRC, "CDF Files/"), DIR_IMPORT, purge=True)
@@ -340,9 +340,9 @@ def select_program(filetype):
     answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
                     "is off, then click OK." % (proj_file_msg, filetype.upper()))
     if answer == "OK":
-        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nGUI interaction "
+        print(Fore.MAGENTA + Style.BRIGHT + "\n\nGUI interaction "
                     "commencing (%s). Move mouse pointer to upper left of "
-                    "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
+                    "screen to abort." % filetype.upper() + Style.RESET_ALL)
     else:
         raise UserCancel()
 
@@ -409,21 +409,21 @@ def check_cpf_vehicle_sn(cpf_param_path):
     # print("%s\tstored in CPF." % vehicle_sn_stored) # DEBUG
 
     if vehicle_sn_stored is None:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
-        input("No S/N found in \"%s\". Press Enter to continue." % cpf_param_filename + colorama.Style.RESET_ALL)
+        print(Fore.RED + Style.BRIGHT)
+        input("No S/N found in \"%s\". Press Enter to continue." % cpf_param_filename + Style.RESET_ALL)
         return False
     elif hex(int(vehicle_sn_stored)) == "0xffffffff":
         # If vehicle S/N was not written to controller, S/N value in CPF export
         # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        print(Fore.RED + Style.BRIGHT)
         input("S/N not stored in controller: Found %s in \"%s\".\nPress Enter to continue."
-                % (hex(int(vehicle_sn_stored)), cpf_param_filename) + colorama.Style.RESET_ALL)
+                % (hex(int(vehicle_sn_stored)), cpf_param_filename) + Style.RESET_ALL)
         return False
     elif vehicle_sn_stored != vehicle_sn_from_filename:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        print(Fore.RED + Style.BRIGHT)
         input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
                                 "(import and export).\nPress Enter to continue."
-                % (vehicle_sn_stored, cpf_param_filename) + colorama.Style.RESET_ALL)
+                % (vehicle_sn_stored, cpf_param_filename) + Style.RESET_ALL)
         return False
     else:
         return True
@@ -444,10 +444,10 @@ def export_cpf_faults(target_dir, output_filename):
     if ERROR_HISTORY_SAVE_BUTTON_LOC is None:
         loc_tuple = gui.locateCenterOnScreen(ERROR_HISTORY_SAVE_IMG)
         if loc_tuple is None:
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+            print(Fore.GREEN + Style.BRIGHT)
             print("\nCan't find Error History save button for (\"%s\").\n"
                                 "Empty fault history [Y/N]?" % output_filename)
-            answer = input("> " + colorama.Style.RESET_ALL)
+            answer = input("> " + Style.RESET_ALL)
             if answer.upper() == "Y":
                 select_program("cpf")
                 gui.hotkey("ctrl", "f4") # Close CPF file.
@@ -489,9 +489,9 @@ def export_cpf_faults(target_dir, output_filename):
     # Check if new file exists in exported location as expected after conversion.
     export_path = os.path.join(target_dir, output_filename)
     if not os.path.exists(export_path):
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("\nCan't confirm output file existence (\"%s\").\nEmpty fault history [Y/N]?" % output_filename)
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer.upper() == "Y":
             select_program("cpf")
             export_path = None
@@ -522,9 +522,9 @@ class GUI_Driver(object):
         answer = gui.confirm("%sBring %s-conversion GUI into focus, make sure CAPSLOCK "
                         "is off, then click OK." % (proj_file_msg, filetype.upper()))
         if answer == "OK":
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nGUI interaction "
+            print(Fore.MAGENTA + Style.BRIGHT + "\n\nGUI interaction "
                         "commencing (%s). Move mouse pointer to upper left of "
-                        "screen to abort." % filetype.upper() + colorama.Style.RESET_ALL)
+                        "screen to abort." % filetype.upper() + Style.RESET_ALL)
             self.gui_in_focus = True
         else:
             self.gui_in_focus = False
@@ -711,14 +711,14 @@ class CloneDataFile(object):
         self.extract_stored_vehicle_sn() # Populates self.vehicle_sn_param
         if self.vehicle_sn_param is None:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
-            input("No valid S/N found in \"%s\". Press Enter to continue." % self.cdf_filename + colorama.Style.RESET_ALL)
+            print(Fore.RED + Style.BRIGHT)
+            input("No valid S/N found in \"%s\". Press Enter to continue." % self.cdf_filename + Style.RESET_ALL)
         elif self.vehicle_sn_param != vehicle_sn_from_filename:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("S/N mismatch: %s in \"%s\".\nEvaluate and fix filenames if needed "
                                     "(import and export).\nPress Enter to continue."
-                    % (self.vehicle_sn_param, self.cdf_filename) + colorama.Style.RESET_ALL)
+                    % (self.vehicle_sn_param, self.cdf_filename) + Style.RESET_ALL)
             # TODO: prompt user - should self.vehicle_sn should be set to vehicle_sn_from_filename in this case?
         else:
             self.vehicle_sn = self.vehicle_sn_param
@@ -749,9 +749,9 @@ class CloneDataFile(object):
             # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
             # https://stackoverflow.com/questions/44891070/whats-the-difference-between-str-isdigit-isnumeric-and-isdecimal-in-pyth
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("S/N not stored in controller: Found '%s' in %s.\nPress Enter to continue."
-                    % (hex(int(vehicle_sn_param)), self.export_filename) + colorama.Style.RESET_ALL)
+                    % (hex(int(vehicle_sn_param)), self.export_filename) + Style.RESET_ALL)
             self.vehicle_sn_param = None
             return
 
@@ -763,19 +763,19 @@ class CloneDataFile(object):
 
         if valid_sn is None:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("Expected '%s' variable to contain S/N in 7-digit format starting "
                             "with 3, 5, or 8.\nFound '%s' in %s instead."
                         % (CDF_VARIABLE_NAME, vehicle_sn_param, self.export_filename)
-                                                        + colorama.Style.RESET_ALL)
+                                                        + Style.RESET_ALL)
             self.vehicle_sn_param = None
         elif valid_sn != vehicle_sn_param:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain S/N with right format but "
                             "may contain additional content."
                         % (CDF_VARIABLE_NAME, vehicle_sn_param, self.export_filename)
-                                                        + colorama.Style.RESET_ALL)
+                                                        + Style.RESET_ALL)
             self.vehicle_sn_param = None
         else:
             self.vehicle_sn_param = vehicle_sn_param # string
@@ -792,18 +792,18 @@ class CloneDataFile(object):
 
         if self.source_ctrl_sw_pn is None:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("No valid SW P/N found in \"%s\". Cannot confirm valid VCL Alias "
                                                 "mapping. Press Enter to continue."
-                                        % self.cdf_filename + colorama.Style.RESET_ALL)
+                                        % self.cdf_filename + Style.RESET_ALL)
             return False
 
         ctrl_sw_rev = REV_MAP_ALL_F[self.source_ctrl_sw_pn]
         if cprj_map_rev != ctrl_sw_rev:
             # self.ParentDB.get_GUI_Driver().lose_focus() # DEBUG
-            # print(colorama.Fore.RED + colorama.Style.BRIGHT) # DEBUG
+            # print(Fore.RED + Style.BRIGHT) # DEBUG
             # print("%s: cprj rev mismatch - Deleting export\n\tCtrl SW %s rev %s, but project file used (%s) was rev %s."
-            #                      % (self, self.source_ctrl_sw_pn, ctrl_sw_rev, cdf_cprj_pn, cprj_map_rev) + colorama.Style.RESET_ALL) # DEBUG
+            #                      % (self, self.source_ctrl_sw_pn, ctrl_sw_rev, cdf_cprj_pn, cprj_map_rev) + Style.RESET_ALL) # DEBUG
             # Caller will delete file.
             return False
         else:
@@ -842,19 +842,19 @@ class CloneDataFile(object):
 
         if valid_sw_pn is None:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("Expected '%s' variable to contain SW P/N in ########.## format."
                                                     "\nFound '%s' in %s instead."
                                         % (VSN_CDF_VAR_NAME, vehicle_ctrl_sw_param,
-                        self.export_filename) + colorama.Style.RESET_ALL)
+                        self.export_filename) + Style.RESET_ALL)
             self.source_ctrl_sw_pn = None
         elif valid_sw_pn != vehicle_ctrl_sw_param:
             self.ParentDB.get_GUI_Driver().lose_focus()
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
+            print(Fore.RED + Style.BRIGHT)
             input("'%s' value '%s' (in %s) appears to contain SW P/N with right "
                                         "format but may contain additional content."
                     % (VSN_CDF_VAR_NAME, vehicle_ctrl_sw_param, self.export_filename)
-                                                        + colorama.Style.RESET_ALL)
+                                                        + Style.RESET_ALL)
             self.source_ctrl_sw_pn = None
         else:
             # Replace period with "G" in SW P/N string and return
@@ -934,8 +934,8 @@ class CloneDataFileDB(object):
             # that need a different cprf rev to process correctly.
             cprj_rev, CDF_obj_list = self.cprj_rev_dict.popitem()
             self.ActiveGUI_Driver.lose_focus()
-            print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
-            input("Load cprj w/ rev %s into CIT then press Enter to continue." % cprj_rev + colorama.Style.RESET_ALL)
+            print(Fore.GREEN + Style.BRIGHT)
+            input("Load cprj w/ rev %s into CIT then press Enter to continue." % cprj_rev + Style.RESET_ALL)
         else:
             # First call will land here.
             CDF_obj_list = self.CDF_list
@@ -949,23 +949,23 @@ class CloneDataFileDB(object):
         for CDF_obj in tqdm(CDF_obj_list, colour="#6700ff"):
             # Check for existing export
             if not CDF_obj.is_valid_cdf():
-                print(colorama.Fore.WHITE, colorama.Style.DIM, end="")
-                tqdm.write("%s: Skipping empty file" % CDF_obj + colorama.Style.RESET_ALL)
+                print(Fore.WHITE, Style.DIM, end="")
+                tqdm.write("%s: Skipping empty file" % CDF_obj + Style.RESET_ALL)
                 continue
             elif CDF_obj.has_export(self.export_dir):
                 # Skip if already processed this file.
                 # Will delete and reprocess to remove invalid mappings from exports.
                 if not CDF_obj.check_cprj_rev_match(self.export_dir):
                     CDF_obj.remove_export()
-                    print(colorama.Fore.RED, end="")
-                    tqdm.write(" %s: Already processed but invalid alias mapping - export deleted" % CDF_obj + colorama.Style.RESET_ALL)
+                    print(Fore.RED, end="")
+                    tqdm.write(" %s: Already processed but invalid alias mapping - export deleted" % CDF_obj + Style.RESET_ALL)
                     # Fall through to conversion below, where it will be converted
                     # again (possibly w/ the right mapping), and if the mapping is wrong
                     # again, the file will get stored along with the needed mapping in cprj_rev_dict
                 else:
                     # revs match, so skip this file.
-                    print(colorama.Fore.WHITE, colorama.Style.DIM, end="")
-                    tqdm.write("%s: Already processed; valid alias mapping confirmed" % CDF_obj + colorama.Style.RESET_ALL)
+                    print(Fore.WHITE, Style.DIM, end="")
+                    tqdm.write("%s: Already processed; valid alias mapping confirmed" % CDF_obj + Style.RESET_ALL)
                     continue
 
             try:
@@ -975,13 +975,13 @@ class CloneDataFileDB(object):
                 if CDF_obj.has_export():
                     # Remove export that may not have been validated
                     CDF_obj.remove_export()
-                print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
-                print(" %s: Encountered exception during processing" % CDF_obj + colorama.Style.RESET_ALL)
+                print(Fore.CYAN + Style.BRIGHT)
+                print(" %s: Encountered exception during processing" % CDF_obj + Style.RESET_ALL)
                 print(exception_text)
-                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+                print(Fore.GREEN + Style.BRIGHT)
                 print("Press Enter to continue with other files, 'e' to exit "
                                 "file-conversion loop, or 'q' to quit program.")
-                answer = input("> " + colorama.Style.RESET_ALL)
+                answer = input("> " + Style.RESET_ALL)
                 if answer.lower() == "":
                     continue
                 elif answer.lower() == "e":
@@ -991,13 +991,13 @@ class CloneDataFileDB(object):
                     quit()
             else:
                 if success:
-                    print(colorama.Fore.GREEN, end="")
-                    tqdm.write(" %s: Processed; valid alias mapping confirmed" % CDF_obj + colorama.Style.RESET_ALL)
+                    print(Fore.GREEN, end="")
+                    tqdm.write(" %s: Processed; valid alias mapping confirmed" % CDF_obj + Style.RESET_ALL)
                 else:
                     # success=False (but no exception thrown) means check_cprj_rev_match() failed
                     # Add to dict to be processed with different rev in tail call below.
-                    print(colorama.Fore.RED, end="")
-                    tqdm.write(" %s: Processed but with invalid alias mapping - export deleted" % CDF_obj + colorama.Style.RESET_ALL)
+                    print(Fore.RED, end="")
+                    tqdm.write(" %s: Processed but with invalid alias mapping - export deleted" % CDF_obj + Style.RESET_ALL)
                     if CDF_obj.get_ctrl_sw_rev() not in self.cprj_rev_dict:
                         self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()] = []
                     self.cprj_rev_dict[CDF_obj.get_ctrl_sw_rev()].append(CDF_obj)
@@ -1038,13 +1038,13 @@ def convert_all(source_dir, dest_dir, check_SNs=False):
                 success = convert_file(filepath, dest_dir, check_sn=check_SNs,
                                                               gui_in_focus=True)
             except Exception as exception_text:
-                print(colorama.Fore.CYAN + colorama.Style.BRIGHT)
-                print("\nEncountered exception processing %s" % filename + colorama.Style.RESET_ALL)
+                print(Fore.CYAN + Style.BRIGHT)
+                print("\nEncountered exception processing %s" % filename + Style.RESET_ALL)
                 print(exception_text)
-                print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+                print(Fore.GREEN + Style.BRIGHT)
                 print("Press Enter to continue with other files, 'e' to exit "
                                 "file-conversion loop, or 'q' to quit program.")
-                answer = input("> " + colorama.Style.RESET_ALL)
+                answer = input("> " + Style.RESET_ALL)
                 if answer.lower() == "":
                     select_program(file_type)
                     continue
@@ -1074,10 +1074,10 @@ def convert_cpfs_in_export(dir_path):
         print("...done")
     except PermissionError:
         # Gets a PermissionError if running on PowerShell most of the time.
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         input("\nEncountered permission error in removing CPF tsv files.\n"
                         "Press Enter to continue to next part of program.")
-        print(colorama.Style.RESET_ALL)
+        print(Style.RESET_ALL)
 
 
 def create_file_struct():
@@ -1134,9 +1134,9 @@ if __name__ == "__main__":
         create_file_struct()
         # Remote source backup, filename updates, sync remote locally and to shared folder
         remote_updates()
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("Press Enter to proceed to file processing or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer == "":
             pass
         else:
@@ -1157,28 +1157,28 @@ if __name__ == "__main__":
             GUI_DriverInstance = GUI_Driver()
             CDF_Database = CloneDataFileDB(import_dir, export_dir)
             CDF_Database.convert_all(GUI_DriverInstance, check_SNs=check_vehicle_sns)
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\nGUI "
-                                "interaction done\n" + colorama.Style.RESET_ALL)
+            print(Fore.MAGENTA + Style.BRIGHT + "\nGUI "
+                                "interaction done\n" + Style.RESET_ALL)
         except gui.FailSafeException:
             GUI_DriverInstance.lose_focus()
-            print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "\n\nUser "
+            print(Fore.MAGENTA + Style.BRIGHT + "\n\nUser "
                                                     "canceled GUI interaction.")
-            print(colorama.Style.RESET_ALL)
+            print(Style.RESET_ALL)
             time.sleep(3 * GUI_PAUSE_MULT)
             # If user terminates GUI interraction, continue running below.
             pass
     else:
-        print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + "Skipping GUI "
+        print(Fore.MAGENTA + Style.BRIGHT + "Skipping GUI "
                                     "interaction (requires Windows system).")
-        print(colorama.Style.RESET_ALL)
+        print(Style.RESET_ALL)
 
 
     if auto_run:
         # Sync to shared folder
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("\nSync local controller-export dir to shared folder? Enter to "
                                 "proceed, 's' to skip, or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer == "":
             print("Syncing ctrl exports to shared folder...")
             sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
@@ -1192,13 +1192,13 @@ if __name__ == "__main__":
 
         # Sync to second remote (Azure blob)
         # Controller exports  |  local dir --> Azure blob storage
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("\nSync local controller export dir to Azure blob? Enter to "
                                 "proceed, 's' to skip, or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer == "":
             print("\nRunning AzCopy sync job (controller exports)...")
-            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            print(Fore.BLUE + Style.BRIGHT)
             returncode = subprocess.call(["azcopy", "sync",
                                                 "--delete-destination", "true",
                                                           "--exclude-path=tmp",
@@ -1206,41 +1206,41 @@ if __name__ == "__main__":
             # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
             # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
             # https://stackoverflow.com/a/15010678
-            print(colorama.Style.RESET_ALL + "...done")
+            print(Style.RESET_ALL + "...done")
         elif answer.lower() == "s":
             print("Skipping sync from local ctrl-export dir to Azure blob.")
         else:
             quit()
 
         # BDX files  |  shared folder --> Azure blob storage
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("\nSync battery-export dir from shared folder to Azure blob? "
                        "Enter to proceed, 's' to skip, or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer == "":
             print("\nRunning AzCopy sync job (batt exports)...")
-            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            print(Fore.BLUE + Style.BRIGHT)
             returncode = subprocess.call(["azcopy", "sync",
                                                 "--delete-destination", "true",
                     os.path.join(DIR_REMOTE_SHARE_BATT, ""), AZ_BLOB_ADDR_BATT])
-            print(colorama.Style.RESET_ALL + "...done")
+            print(Style.RESET_ALL + "...done")
         elif answer.lower() == "s":
             print("Skipping sync from shared-folder batt dir to Azure blob.")
         else:
             quit()
 
         # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
-        print(colorama.Fore.GREEN + colorama.Style.BRIGHT)
+        print(Fore.GREEN + Style.BRIGHT)
         print("\nSync MES-export dir from shared folder to Azure blob? "
                        "Enter to proceed, 's' to skip, or 'q' to quit program.")
-        answer = input("> " + colorama.Style.RESET_ALL)
+        answer = input("> " + Style.RESET_ALL)
         if answer == "":
             print("\nRunning AzCopy sync job (MES batt-scan export)...")
-            print(colorama.Fore.BLUE + colorama.Style.BRIGHT)
+            print(Fore.BLUE + Style.BRIGHT)
             returncode = subprocess.call(["azcopy", "sync",
                                                 "--delete-destination", "true",
                       os.path.join(DIR_REMOTE_SHARE_MFG, ""), AZ_BLOB_ADDR_MFG])
-            print(colorama.Style.RESET_ALL + "...done")
+            print(Style.RESET_ALL + "...done")
         elif answer.lower() == "s":
             print("Skipping sync from shared-folder MES dir to Azure blob.")
         else:
