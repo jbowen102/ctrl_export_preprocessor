@@ -28,14 +28,14 @@ from ctrl_export_preprocessor.dir_names import DIR_REMOTE_SRC, \
                                                ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
-DATE_FORMAT = "%Y%m%d"
+DATE_REGEX_1 = r"(20\d{2}[0-1]\d[0-3]\d)"
+DATE_REGEX_2 = r"(20\d{2}-[0-1]\d-[0-3]\d)"
+# Could catch some invalid dates like 20231131. Further validated below in find_in_string()
+DATE_FORMAT_1 = "%Y%m%d"
+DATE_FORMAT_2 = "%Y-%m-%d"
+
 SN_REGEX = r"(3\d{6}|5\d{6}|8\d{6})"
 # Any "3" or "5" or "8" followed by six more digits
-DATE_REGEX = r"(20\d{2}[0-1]\d[0-3]\d)"
-# Any "20" followed by two digits,
-    # followed by either "0" or "1" and any digit (months)
-        # followed by either "0", "1", "2", or "3" paired with any digit (days 00-39)
-# Could catch some invalid dates like 20231131. Further validated below in find_in_string()
 CDF_SW_PN_REGEX = r"\d{6}\.\d{2}|\d{8}\.\d{2}"
 SW_PN_REGEX = r"\d{6}G\d{2}|\d{8}G\d{2}"
 
@@ -65,12 +65,18 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
             # If looking for a date, check for valid date value (regex doesn't fully validate)
             # print("\t\tmatches[0]: " + matches[0]) # DEBUG
             try:
-                time.strptime(matches[0], DATE_FORMAT)
+                time.strptime(matches[0], DATE_FORMAT_1)
             except ValueError:
-                # Fall through to prompt user for manual entry.
-                pass
+                try:
+                    time.strptime(matches[0], DATE_FORMAT_2)
+                except ValueError:
+                    # Fall through to prompt user for manual entry.
+                    pass
+                else:
+                    # Valid date in format 2
+                    return matches[0], prompted
             else:
-                # Valid date
+                # Valid date in format 1
                 return matches[0], prompted
         elif len(matches) == 1:
             return matches[0], prompted
@@ -121,7 +127,7 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
                                                             "filename \"%s\".\n" \
                                 "Type manually (YYYYMMDD format): " % file_name
                         # print("\tDate:") # DEBUG
-                        date_match, _ = find_in_string(DATE_REGEX, substring,
+                        date_match, _ = find_in_string(DATE_REGEX_1, substring,
                                     prompt_str, date_target=True, allow_none=True)
                         # print("\tReceived %s as date back from find_in_string()" % date_match) # DEBUG
 
@@ -138,13 +144,13 @@ def datestamp_remote(remote=DIR_REMOTE_SRC):
 
                         # Some files (CDF at least) have bogus mod dates - usually in 1999 or 2000.
                         # In that case, use today's date.
-                        if mod_date < time.strptime("20200101", DATE_FORMAT):
+                        if mod_date < time.strptime("20200101", DATE_FORMAT_1):
                             # Substitute in today's date
                             date_to_use = time.localtime()
                         else:
                             date_to_use = mod_date
 
-                        datestamp = time.strftime(DATE_FORMAT, date_to_use)
+                        datestamp = time.strftime(DATE_FORMAT_1, date_to_use)
 
                     new_filename = "%s_sn%s%s" % (datestamp, serial_num, ext)
                     new_filepath = os.path.join(dirpath, new_filename)
