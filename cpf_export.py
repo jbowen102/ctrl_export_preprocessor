@@ -33,6 +33,8 @@ DATE_REGEX_2 = r"(20\d{2}-[0-1]\d-[0-3]\d)"
 # Could catch some invalid dates like 20231131. Further validated below in find_in_string()
 DATE_FORMAT_1 = "%Y%m%d"
 DATE_FORMAT_2 = "%Y-%m-%d"
+DATE_FORMAT_3 = "%m%d%Y"
+DATE_FORMATS = [DATE_FORMAT_1, DATE_FORMAT_2, DATE_FORMAT_3]
 
 SN_REGEX = r"(3\d{6}|5\d{6}|8\d{6})"
 # Any "3" or "5" or "8" followed by six more digits
@@ -64,20 +66,14 @@ def find_in_string(regex_pattern, string_to_search, prompt, date_target=False, a
         if len(matches) == 1 and date_target:
             # If looking for a date, check for valid date value (regex doesn't fully validate)
             # print("\t\tmatches[0]: " + matches[0]) # DEBUG
-            try:
-                time.strptime(matches[0], DATE_FORMAT_1)
-            except ValueError:
+            for date_format in DATE_FORMATS:
                 try:
-                    time.strptime(matches[0], DATE_FORMAT_2)
+                    time.strptime(matches[0], date_format)
                 except ValueError:
-                    # Fall through to prompt user for manual entry.
-                    pass
+                    continue
                 else:
-                    # Valid date in format 2
+                    # Valid date
                     return matches[0], prompted
-            else:
-                # Valid date in format 1
-                return matches[0], prompted
         elif len(matches) == 1:
             return matches[0], prompted
             # loop exits
