@@ -17,15 +17,26 @@ if os.name == "nt":
     # https://pyautogui.readthedocs.io/en/latest/quickstart.html
 
 
-import ctrl_export_preprocessor.fix_cpf_export_format as fixcpf
-from ctrl_export_preprocessor.sw_rev_mapping import REV_MAP_ALL_F
-from ctrl_export_preprocessor.dir_names import DIR_REMOTE_SRC, \
-                                               DIR_FIELD_DATA, \
-                                                   DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
-                                                   DIR_EXPORT, \
-                                               DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, DIR_REMOTE_SHARE_MFG, \
-                                               AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, AZ_BLOB_ADDR_MFG, \
-                                               ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
+try:
+    import fix_cpf_export_format as fixcpf
+    from sw_rev_mapping import REV_MAP_ALL_F
+    from dir_names import DIR_REMOTE_SRC, \
+                          DIR_FIELD_DATA, \
+                              DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
+                              DIR_EXPORT, \
+                          DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, DIR_REMOTE_SHARE_MFG, \
+                          AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, AZ_BLOB_ADDR_MFG, \
+                          ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
+except ModuleNotFoundError:
+    import ctrl_export_preprocessor.fix_cpf_export_format as fixcpf
+    from ctrl_export_preprocessor.sw_rev_mapping import REV_MAP_ALL_F
+    from ctrl_export_preprocessor.dir_names import DIR_REMOTE_SRC, \
+                                                DIR_FIELD_DATA, \
+                                                    DIR_IMPORT_ROOT, DIR_REMOTE_BU, DIR_IMPORT, \
+                                                    DIR_EXPORT, \
+                                                DIR_REMOTE_SHARE_CTRL, DIR_REMOTE_SHARE_BATT, DIR_REMOTE_SHARE_MFG, \
+                                                AZ_BLOB_ADDR_CTRL, AZ_BLOB_ADDR_BATT, AZ_BLOB_ADDR_MFG, \
+                                                ERROR_HISTORY_SAVE_IMG, ERROR_HISTORY_BLANK
 
 
 DATE_REGEX_1 = r"(20\d{2}[0-1]\d[0-3]\d)"
