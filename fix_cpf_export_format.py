@@ -4,7 +4,7 @@ import xlrd
 import argparse
 from datetime import datetime
 
-import colorama
+from colorama import Style, Fore, Back
 from tqdm import tqdm
 import magic
 from xlsxwriter.workbook import Workbook
@@ -78,8 +78,8 @@ def convert_param_export(tsv_path, new_filename, check_for_xls=True, replace=Tru
             else:
                 tqdm_obj.write(output_str) # DEBUG
         except PermissionError:
-            print(colorama.Fore.YELLOW)
-            print("Error removing %s" % os.path.basename(tsv_path) + colorama.Style.RESET_ALL)
+            print(Fore.YELLOW)
+            print("Error removing %s" % os.path.basename(tsv_path) + Style.RESET_ALL)
             perm_error = True
 
     return new_filepath, perm_error
@@ -196,9 +196,9 @@ def parse_cpf_vehicle_sn(cpf_param_filepath):
         # Check for 1206AC CPF
         if data_list and data_list[0].startswith("1206AC"):
             # No vehicle S/N stored?
-            print(colorama.Fore.RED + colorama.Style.BRIGHT)
-            input("%s is a 1206AC export. Press Enter to continue." %
-                os.path.basename(cpf_param_filepath) + colorama.Style.RESET_ALL)
+            print(Fore.RED + Style.BRIGHT)
+            print("%s is a 1206AC export." %
+                        os.path.basename(cpf_param_filepath) + Style.RESET_ALL)
             return None
 
         if len(data_list) >= 2:
@@ -212,9 +212,9 @@ def parse_cpf_vehicle_sn(cpf_param_filepath):
                     return field_value # string
 
     if not found_sn_field:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT)
+        print(Fore.RED + Style.BRIGHT)
         input("Can't find S/N field in %s. Press Enter to continue."
-                % os.path.basename(cpf_param_filepath) + colorama.Style.RESET_ALL)
+                % os.path.basename(cpf_param_filepath) + Style.RESET_ALL)
         return None
 
 

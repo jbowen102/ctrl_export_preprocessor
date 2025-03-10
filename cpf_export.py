@@ -423,14 +423,16 @@ def check_cpf_vehicle_sn(cpf_param_path):
 
     if vehicle_sn_stored is None:
         print(Fore.RED + Style.BRIGHT)
-        input("No S/N found in \"%s\". Press Enter to continue." % cpf_param_filename + Style.RESET_ALL)
+        print("No S/N found in \"%s\"." % cpf_param_filename + Style.RESET_ALL)
+        time.sleep(2)
         return False
     elif hex(int(vehicle_sn_stored)) == "0xffffffff":
         # If vehicle S/N was not written to controller, S/N value in CPF export
         # will be "4294967295", which translates to "0xFFFFFFFF" in hex.
         print(Fore.RED + Style.BRIGHT)
-        input("S/N not stored in controller: Found %s in \"%s\".\nPress Enter to continue."
+        print("S/N not stored in controller: Found %s in \"%s\"."
                 % (hex(int(vehicle_sn_stored)), cpf_param_filename) + Style.RESET_ALL)
+        time.sleep(2)
         return False
     elif vehicle_sn_stored != vehicle_sn_from_filename:
         print(Fore.RED + Style.BRIGHT)
