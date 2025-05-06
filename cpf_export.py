@@ -1024,7 +1024,7 @@ class CloneDataFileDB(object):
             self.convert_all(self.ActiveGUI_Driver, check_SNs=check_SNs)
 
 
-def convert_all(source_dir, dest_dir, check_SNs=False):
+def convert_all_cpfs(source_dir, dest_dir, check_SNs=False):
     file_type = "cpf"
 
     if not os.path.exists(source_dir):
@@ -1125,7 +1125,7 @@ if __name__ == "__main__":
                                                         "to convert.", type=str)
     parser.add_argument("-s", "--slow", help="Specify factor by which to extend "
                             "pauses b/w GUI commands. >1 extends pauses while "
-                                            "<1 speeds them up.", type=float)
+                                    "<1 speeds them up.", type=float, default=1)
     # parser.add_argument("-f", "--file", help="Specify file path of one export  " # maybe implement later
     #                                                     "to reformat.", type=str)
     # parser.add_argument("-a", "--auto", help="Specify to execute entire routine " # maybe implement later
@@ -1160,60 +1160,60 @@ if __name__ == "__main__":
 
     # Convert exports
     if os.name == "nt":
-        if args.slow:
-            GUI_PAUSE_MULT = args.slow
-        else:
-            GUI_PAUSE_MULT = 1.0 # Extend or reduce pauses between GUI commands
+        GUI_PAUSE_MULT = args.slow # Extend or reduce pauses between GUI commands
         gui.PAUSE = 0.5 * GUI_PAUSE_MULT # 500 ms pause after each command.
 
         try:
-            convert_all(import_dir, export_dir, check_SNs=check_vehicle_sns)
+            convert_all_cpfs(import_dir, export_dir, check_SNs=check_vehicle_sns)
 
             GUI_DriverInstance = GUI_Driver()
             CDF_Database = CloneDataFileDB(import_dir, export_dir)
             CDF_Database.convert_all(GUI_DriverInstance, check_SNs=check_vehicle_sns)
-            print(Fore.MAGENTA + Style.BRIGHT + "\nGUI "
-                                "interaction done\n" + Style.RESET_ALL)
+            print(Fore.MAGENTA + Style.BRIGHT + "\nGUI interaction done\n" + Style.RESET_ALL)
+
         except gui.FailSafeException:
             GUI_DriverInstance.lose_focus()
-            print(Fore.MAGENTA + Style.BRIGHT + "\n\nUser "
-                                                    "canceled GUI interaction.")
+            print(Fore.MAGENTA + Style.BRIGHT + "\n\nUser canceled GUI interaction.")
             print(Style.RESET_ALL)
             time.sleep(3 * GUI_PAUSE_MULT)
             # If user terminates GUI interraction, continue running below.
             pass
     else:
-        print(Fore.MAGENTA + Style.BRIGHT + "Skipping GUI "
-                                    "interaction (requires Windows system).")
+        print(Fore.MAGENTA + Style.BRIGHT + "Skipping GUI interaction "
+                                                   "(requires Windows system).")
         print(Style.RESET_ALL)
 
 
     if auto_run:
-        # Sync to shared folder
-        print(Fore.GREEN + Style.BRIGHT)
-        print("\nSync local Controller-export dir to shared folder? Enter to "
-                                "proceed, 's' to skip, or 'q' to quit program.")
-        answer = input("> " + Style.RESET_ALL)
-        if answer == "":
-            print("Syncing ctrl exports to shared folder...")
-            sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
-                                                    purge=True, multilevel=False)
-            print("...done")
-        elif answer.lower() == "s":
-            print("Skipping sync from local ctrl-export dir to shared folder.")
-        else:
-            # Accept anything other than a blank input as a quit command.
-            quit()
+        sync_to_remote_dirs()
 
-        # Sync to second remote (Azure blob)
-        # Controller exports  |  local dir --> Azure blob storage
-        sync_to_azure(DIR_EXPORT, AZ_BLOB_ADDR_CTRL, "local Controller-export dir")
 
-        # BDX files  |  shared folder --> Azure blob storage
-        sync_to_azure(DIR_REMOTE_SHARE_BATT, AZ_BLOB_ADDR_BATT, "shared-folder Battery-export dir")
+def sync_to_remote_dirs():
+    # Sync to shared folder
+    print(Fore.GREEN + Style.BRIGHT)
+    print("\nSync local Controller-export dir to shared folder? Enter to "
+                            "proceed, 's' to skip, or 'q' to quit program.")
+    answer = input("> " + Style.RESET_ALL)
+    if answer == "":
+        print("Syncing ctrl exports to shared folder...")
+        sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
+                                                purge=True, multilevel=False)
+        print("...done")
+    elif answer.lower() == "s":
+        print("Skipping sync from local ctrl-export dir to shared folder.")
+    else:
+        # Accept anything other than a blank input as a quit command.
+        quit()
 
-        # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
-        sync_to_azure(DIR_REMOTE_SHARE_MFG, AZ_BLOB_ADDR_MFG, "shared-folder MES batt-scan export dir")
+    # Sync to second remote (Azure blob)
+    # Controller exports  |  local dir --> Azure blob storage
+    sync_to_azure(DIR_EXPORT, AZ_BLOB_ADDR_CTRL, "local Controller-export dir")
+
+    # BDX files  |  shared folder --> Azure blob storage
+    sync_to_azure(DIR_REMOTE_SHARE_BATT, AZ_BLOB_ADDR_BATT, "shared-folder Battery-export dir")
+
+    # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
+    sync_to_azure(DIR_REMOTE_SHARE_MFG, AZ_BLOB_ADDR_MFG, "shared-folder MES batt-scan export dir")
 
 
 def sync_to_azure(src_dir, dest_dir, src_desc):
