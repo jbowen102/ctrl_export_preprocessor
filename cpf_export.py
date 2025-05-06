@@ -705,7 +705,8 @@ class CloneDataFile(object):
             print("\n\tSkipping %s (empty file)." % os.path.basename(cdf_path))
             return False
 
-        self.check_stored_vehicle_sn()
+        if check_sn:
+            self.check_stored_vehicle_sn()
 
         valid_alias_mapping = self.check_cprj_rev_match()
         if not valid_alias_mapping:
