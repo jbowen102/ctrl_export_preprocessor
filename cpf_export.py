@@ -1119,6 +1119,56 @@ def create_file_struct():
         print("Created %s" % DIR_EXPORT)
 
 
+def sync_to_remote_dirs():
+    # Sync to shared folder
+    print(Fore.GREEN + Style.BRIGHT)
+    print("\nSync local Controller-export dir to shared folder? Enter to "
+                            "proceed, 's' to skip, or 'q' to quit program.")
+    answer = input("> " + Style.RESET_ALL)
+    if answer == "":
+        print("Syncing ctrl exports to shared folder...")
+        sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
+                                                purge=True, multilevel=False)
+        print("...done")
+    elif answer.lower() == "s":
+        print("Skipping sync from local ctrl-export dir to shared folder.")
+    else:
+        # Accept anything other than a blank input as a quit command.
+        quit()
+
+    # Sync to second remote (Azure blob)
+    # Controller exports  |  local dir --> Azure blob storage
+    sync_to_azure(DIR_EXPORT, AZ_BLOB_ADDR_CTRL, "local Controller-export dir")
+
+    # BDX files  |  shared folder --> Azure blob storage
+    sync_to_azure(DIR_REMOTE_SHARE_BATT, AZ_BLOB_ADDR_BATT, "shared-folder Battery-export dir")
+
+    # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
+    sync_to_azure(DIR_REMOTE_SHARE_MFG, AZ_BLOB_ADDR_MFG, "shared-folder MES batt-scan export dir")
+
+
+def sync_to_azure(src_dir, dest_dir, src_desc):
+    print(Fore.GREEN + Style.BRIGHT)
+    print("\nSync %s to Azure blob? Enter to "
+                    "proceed, 's' to skip, or 'q' to quit program." % src_desc)
+    answer = input("> " + Style.RESET_ALL)
+    if answer == "":
+        print("\nRunning AzCopy sync job from %s..." % src_desc)
+        print(Fore.BLUE + Style.BRIGHT)
+        returncode = subprocess.call(["azcopy", "sync",
+                                            "--delete-destination", "true",
+                                                        "--exclude-path=tmp",
+                                            os.path.join(src_dir, ""), dest_dir])
+        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
+        # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
+        # https://stackoverflow.com/a/15010678
+        print(Style.RESET_ALL + "...done")
+    elif answer.lower() == "s":
+        print("Skipping sync from %s to Azure blob." % src_desc)
+    else:
+        quit()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Program to convert CPF or CDF "
                                     "exports from binary to .xlsx file format.")
@@ -1188,52 +1238,3 @@ if __name__ == "__main__":
     if auto_run:
         sync_to_remote_dirs()
 
-
-def sync_to_remote_dirs():
-    # Sync to shared folder
-    print(Fore.GREEN + Style.BRIGHT)
-    print("\nSync local Controller-export dir to shared folder? Enter to "
-                            "proceed, 's' to skip, or 'q' to quit program.")
-    answer = input("> " + Style.RESET_ALL)
-    if answer == "":
-        print("Syncing ctrl exports to shared folder...")
-        sync_remote(DIR_EXPORT, os.path.join(DIR_REMOTE_SHARE_CTRL, "Converted"),
-                                                purge=True, multilevel=False)
-        print("...done")
-    elif answer.lower() == "s":
-        print("Skipping sync from local ctrl-export dir to shared folder.")
-    else:
-        # Accept anything other than a blank input as a quit command.
-        quit()
-
-    # Sync to second remote (Azure blob)
-    # Controller exports  |  local dir --> Azure blob storage
-    sync_to_azure(DIR_EXPORT, AZ_BLOB_ADDR_CTRL, "local Controller-export dir")
-
-    # BDX files  |  shared folder --> Azure blob storage
-    sync_to_azure(DIR_REMOTE_SHARE_BATT, AZ_BLOB_ADDR_BATT, "shared-folder Battery-export dir")
-
-    # MES (manufacturing) battery-scan data  |  shared folder --> Azure blob storage
-    sync_to_azure(DIR_REMOTE_SHARE_MFG, AZ_BLOB_ADDR_MFG, "shared-folder MES batt-scan export dir")
-
-
-def sync_to_azure(src_dir, dest_dir, src_desc):
-    print(Fore.GREEN + Style.BRIGHT)
-    print("\nSync %s to Azure blob? Enter to "
-                    "proceed, 's' to skip, or 'q' to quit program." % src_desc)
-    answer = input("> " + Style.RESET_ALL)
-    if answer == "":
-        print("\nRunning AzCopy sync job from %s..." % src_desc)
-        print(Fore.BLUE + Style.BRIGHT)
-        returncode = subprocess.call(["azcopy", "sync",
-                                            "--delete-destination", "true",
-                                                        "--exclude-path=tmp",
-                                            os.path.join(src_dir, ""), dest_dir])
-        # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-sync
-        # https://stackoverflow.com/questions/68894328/azcopy-copy-exclude-a-folder-and-the-files-inside-it
-        # https://stackoverflow.com/a/15010678
-        print(Style.RESET_ALL + "...done")
-    elif answer.lower() == "s":
-        print("Skipping sync from %s to Azure blob." % src_desc)
-    else:
-        quit()
