@@ -1098,25 +1098,15 @@ def convert_cpfs_in_export(dir_path):
 
 def create_file_struct():
     # Make field-data dirs if any don't exist yet.
-    if not os.path.exists(DIR_FIELD_DATA):
-        os.mkdir(DIR_FIELD_DATA)
-        print("Created %s" % DIR_FIELD_DATA)
+    def create_dir_if_not_exist(dir_path):
+        os.mkdirs(dir_path, exist_ok=True)
+        print("Created %s" % dir_path)
 
-    if not os.path.exists(DIR_IMPORT_ROOT):
-        os.mkdir(DIR_IMPORT_ROOT)
-        print("Created %s" % DIR_IMPORT_ROOT)
-
-    if not os.path.exists(DIR_REMOTE_BU):
-        os.mkdir(DIR_REMOTE_BU)
-        print("Created %s" % DIR_REMOTE_BU)
-
-    if not os.path.exists(DIR_IMPORT):
-        os.mkdir(DIR_IMPORT)
-        print("Created %s" % DIR_IMPORT)
-
-    if not os.path.exists(DIR_EXPORT):
-        os.mkdir(DIR_EXPORT)
-        print("Created %s" % DIR_EXPORT)
+    create_dir_if_not_exist(DIR_FIELD_DATA)
+    create_dir_if_not_exist(DIR_IMPORT_ROOT)
+    create_dir_if_not_exist(DIR_REMOTE_BU)
+    create_dir_if_not_exist(DIR_IMPORT)
+    create_dir_if_not_exist(DIR_EXPORT)
 
 
 def sync_to_remote_dirs():
